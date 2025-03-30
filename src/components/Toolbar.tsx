@@ -3,7 +3,7 @@ import { NodeType } from '../types/Pipeline';
 
 interface ToolbarProps {
   onAddNode: (type: NodeType) => void;
-  editorWidth: number; // Width in percentage
+  editorWidth: number; // Width in pixels
 }
 
 export const Toolbar: React.FC<ToolbarProps> = ({ onAddNode, editorWidth }) => {
@@ -11,7 +11,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({ onAddNode, editorWidth }) => {
     <div style={{
       position: 'absolute',
       top: 10,
-      left: `${editorWidth + 1}%`, // Position after the editor panel
+      left: editorWidth + 10, // Position after the divider with 10px padding
       zIndex: 4,
       background: 'white',
       padding: '10px',

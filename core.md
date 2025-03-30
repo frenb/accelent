@@ -5,14 +5,17 @@ alwaysApply: true
 ---
 Always reference EditorPanel as EditorPanel.tsx
 
+# Overall UI
+* on the left hand side is the EditorPanel. The EditorPanel was working well, so don't change the code there.
+* the right hand side is the node canvas editor
+* in between the left and right hand side there is a separator line that users can drag left or right to increase the size of the one side or the other 
+* the resizable separator should start in the middle horizontally, and a user should be able to grab the separator and move it left or right to resize the view
+
 #drag and drop tab onto existing node
 Users can drag and drop a tab onto an existing node. The name of the node should change to match the tab's name. If the tab is of a different type than the node, then update the node's type to match the tab's type. 
 
 # Smart Connector: Automatically connecting nodes
 Let's make the assumption that when nodes are added to the diagram canvas that the user intends for the new node to be connected to one of the existing nodes. When a new node is dropped, add connect the new node to the closest existing node, and if the new node is above the closest existing node, make the connection start from the bottom of the new node and connect to the top of the closest existing node, and if the new node is below the existing node, make the connection start from the bottom of the existing node to the top of the new node.
-
-# Shift select nodes to move them
-Users are ableot select groups of nodes by holding shift and clicking the left mouse button. Once 2 or mode nodes are selected, the user can move that group of nodes together 
 
 # Placement of the nodes, naming, and types
 * When a user drags and drops a tab onto the diagram canvas the center of the node should be placed where the cursor is at the time that the left mouse button is selected
@@ -27,18 +30,23 @@ When nodes are added to the graph by clicking a node type on the node palette we
 (3) if the graph already has nodes, the new node should center aligned horizontally directly below the lowest existing node 
 
 # Delete nodes
-Add a small x button the nodes that enables users to delete nodes from the diagram, and that behaves like the closed buttons on Chrome tabs
+User can delete a node by clicking on it and then clicking the delete key on the keyboard. When a node is selected, its border should change to a bright green color. 
 
-# Button styles
+# Shift select nodes to move them
+Users are able to select groups of nodes by holding shift and clicking the left mouse button. Once 2 or mode nodes are selected, the user can move that group of nodes together 
+
+# Node styles
 Buttons should have a white background and the letter in the circle matching the type of node. "DS" for "Data Source" type nodes, Add "P" for "Prompt" type nodes, and Add "D" for "Display" type nodes
+
+# style 
+Use Open Sans font everywhere
 
 # Check the following
 Make sure that NODE_WIDTH, NODE_HEIGHT, etc. are defined
 Use screenToFlowPosition instead of project. `project` is deprecated. Instead use `screenToFlowPosition`. There is no need to subtract the react flow bounds anymore! 
 React Hooks must be called in a React function component or a custom React Hook function
 
-# style 
-Use Open Sans font everywhere
+
 
 # ace editor
 For the tabbed text editor, I want to use Ace the editor with the appropriate syntax highlighting for each type of tab

@@ -1,5 +1,5 @@
-import React, { useEffect, useCallback, useRef } from 'react';
-import { Handle, Position, NodeProps, useReactFlow } from 'reactflow';
+import React, { useEffect, useCallback } from 'react';
+import { Handle, Position, NodeProps } from 'reactflow';
 import { NodeData } from '../../types/Pipeline';
 import './PromptNode.css';
 
@@ -36,8 +36,6 @@ const scrollbarStyles = `
 `;
 
 export const PromptNode: React.FC<PromptNodeProps> = ({ data, id, onRemove }) => {
-  const { setNodes, getNodes } = useReactFlow();
-
   const isExecuting = data.output === undefined && data.prompt !== undefined;
   const isJson = data.output && typeof data.output === 'string' && data.output.startsWith('{');
 
@@ -53,22 +51,30 @@ export const PromptNode: React.FC<PromptNodeProps> = ({ data, id, onRemove }) =>
     return data.output;
   }, [data.output, isJson]);
 
-  const handleOutputDoubleClick = (e: React.MouseEvent) => {
-    console.error('Double-click detected on output area');
+  const handleDelete = useCallback((e: React.MouseEvent) => {
+    console.log('Delete button clicked for node:', id);
+    e.preventDefault();
     e.stopPropagation();
-    if (!data.output) {
-      console.error('No output available');
-      return;
+    
+    if (onRemove) {
+      console.log('Calling onRemove with id:', id);
+      onRemove(id);
+    } else {
+      console.log('No onRemove handler provided');
     }
+  }, [id, onRemove]);
+
+  const handleScroll = (e: React.WheelEvent<HTMLPreElement>) => {
+    e.stopPropagation();
+    e.preventDefault();
+    const pre = e.currentTarget;
+    pre.scrollTop += e.deltaY;
+  };
+
+  const handleOutputDoubleClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!data.output) return;
     
-    console.error('Dispatching createOutputTab event:', {
-      name: `${data.label} Output`,
-      content: data.output,
-      type: 'display',
-      color: '#2196F3'
-    });
-    
-    // Create a new tab with the output
     const event = new CustomEvent('createOutputTab', {
       detail: {
         name: `${data.label} Output`,
@@ -165,31 +171,6 @@ export const PromptNode: React.FC<PromptNodeProps> = ({ data, id, onRemove }) =>
     };
   }, [executePrompt, id]);
 
-  const handleScroll = (e: React.WheelEvent<HTMLPreElement>) => {
-    e.stopPropagation();
-    e.preventDefault();
-    const pre = e.currentTarget;
-    pre.scrollTop += e.deltaY;
-  };
-
-  const handleDelete = useCallback((e: React.MouseEvent) => {
-    console.error('Delete button clicked for node:', id);
-    e.preventDefault();
-    e.stopPropagation();
-    
-    try {
-      // Call the onRemove prop directly
-      if (onRemove) {
-        console.error('Calling onRemove with id:', id);
-        onRemove(id);
-      } else {
-        console.error('No onRemove handler provided');
-      }
-    } catch (error) {
-      console.error('Error deleting node:', error);
-    }
-  }, [id, onRemove]);
-
   return (
     <div className="prompt-node">
       <Handle type="target" position={Position.Top} />
@@ -203,6 +184,7 @@ export const PromptNode: React.FC<PromptNodeProps> = ({ data, id, onRemove }) =>
           onClick={handleDelete}
           type="button"
           aria-label="Delete node"
+          style={{ zIndex: 1000 }}
         >
           ×
         </button>
@@ -241,10 +223,7 @@ export const PromptNode: React.FC<PromptNodeProps> = ({ data, id, onRemove }) =>
                 <div 
                   className="scrollable-container"
                   style={{ cursor: 'pointer' }}
-                  onDoubleClick={(e) => {
-                    e.stopPropagation();
-                    handleOutputDoubleClick(e);
-                  }}
+                  onDoubleClick={handleOutputDoubleClick}
                 >
                   <pre 
                     className="scrollable-content"

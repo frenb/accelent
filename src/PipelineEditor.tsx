@@ -1,760 +1,294 @@
-import React, { useState, useCallback, useRef, useEffect } from 'react';
-import ReactFlow, { 
-  Background,
-  Controls,
-  Connection,
+import React, { useCallback, useState, useEffect, useRef } from 'react';
+import ReactFlow, {
+  Node,
   Edge,
-  Node as FlowNode,
-  applyNodeChanges,
-  addEdge,
-  ReactFlowProvider,
-  useReactFlow,
-  Panel,
+  Controls,
+  Background,
+  useNodesState,
+  useEdgesState,
   NodeChange,
   EdgeChange,
-  useStore,
-  NodeProps,
-  Handle,
-  Position,
+  Connection,
+  addEdge,
+  NodeTypes,
+  useReactFlow,
+  ReactFlowProvider,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
-import { Node, Pipeline, NodeType, NodeData } from './types/Pipeline';
+import { DataSourceNode } from './components/nodes/DataSourceNode';
 import { Toolbar } from './components/Toolbar';
 import { EditorPanel } from './components/EditorPanel';
-import { DataSourceNode } from './components/nodes/DataSourceNode';
-import { PromptNode } from './components/nodes/PromptNode';
-import { DisplayNode } from './components/nodes/DisplayNode';
-import { ContextMenu } from './components/ContextMenu';
-import { GoogleSheetsNode } from './components/nodes/GoogleSheetsNode';
-import { SpreadsheetNode } from './components/nodes/SpreadsheetNode';
+import { NodeType } from './types/Pipeline';
 
-const NODE_WIDTH = 180;
-const NODE_HEIGHT = 100;
-
-interface PipelineEditorProps {
-  pipeline: Pipeline;
-  onChange: (pipeline: Pipeline) => void;
-}
-
-const findClosestNode = (nodes: FlowNode<NodeData>[], position: { x: number, y: number }): FlowNode<NodeData> | null => {
-  let closestNode: FlowNode<NodeData> | null = null;
-  let minDistance = Infinity;
-
-  nodes.forEach(node => {
-    const dx = node.position.x - position.x;
-    const dy = node.position.y - position.y;
-    const distance = Math.sqrt(dx * dx + dy * dy);
-    
-    if (distance < minDistance) {
-      minDistance = distance;
-      closestNode = node;
-    }
-  });
-
-  return closestNode;
+// Define node types
+const nodeTypes: NodeTypes = {
+  dataSource: DataSourceNode,
 };
 
-const createConnection = (sourceNode: FlowNode<NodeData>, targetNode: FlowNode<NodeData>) => {
-  const isAbove = sourceNode.position.y < targetNode.position.y;
-  
-  return {
-    id: `edge-${sourceNode.id}-${targetNode.id}`,
-    source: isAbove ? sourceNode.id : targetNode.id,
-    target: isAbove ? targetNode.id : sourceNode.id,
-    type: 'smoothstep',
-    animated: true
-  };
-};
+// Initial nodes
+const initialNodes: Node[] = [
+  {
+    id: '1',
+    type: 'dataSource',
+    position: { x: 250, y: 100 },
+    data: { label: 'Data Source 1', sourceType: 'CSV' },
+  },
+  {
+    id: '2',
+    type: 'dataSource',
+    position: { x: 250, y: 300 },
+    data: { label: 'Data Source 2', sourceType: 'JSON' },
+  },
+];
 
-const PipelineEditorContent: React.FC<PipelineEditorProps> = ({ pipeline, onChange }) => {
-  const [nodes, setNodes] = useState<FlowNode<NodeData>[]>(pipeline.nodes || []);
-  const [edges, setEdges] = useState<Edge[]>(pipeline.edges || []);
-  const [editorWidth, setEditorWidth] = useState(50); // Width in percentage
-  const [isResizing, setIsResizing] = useState(false);
+// Initial edges
+const initialEdges: Edge[] = [];
+
+function PipelineEditorContent() {
+  const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
+  const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
+  const [selectedNode, setSelectedNode] = useState<string | null>(null);
+  const [editorWidth, setEditorWidth] = useState(window.innerWidth / 2);
   const { screenToFlowPosition } = useReactFlow();
-  const [selectedNode, setSelectedNode] = useState<FlowNode<NodeData> | null>(null);
-  const [contextMenu, setContextMenu] = useState<{
-    mouseX: number;
-    mouseY: number;
-    nodeId: string;
-    edgeId: string;
-  } | null>(null);
+  const isDragging = useRef(false);
+  const startX = useRef(0);
+  const startWidth = useRef(0);
 
-  // Add event listener for node output updates
-  React.useEffect(() => {
-    const handleNodeOutputUpdate = (event: CustomEvent) => {
-      const { nodeId, output } = event.detail;
-      setNodes((nds) => {
-        const updatedNodes = nds.map(node => {
-          if (node.id === nodeId) {
-            return {
-              ...node,
-              data: {
-                ...node.data,
-                output
-              }
-            };
-          }
-          return node;
-        });
-        onChange({ ...pipeline, nodes: updatedNodes });
-        return updatedNodes;
-      });
-    };
+  // Calculate editor width percentage
+  const editorWidthPercentage = (editorWidth / window.innerWidth) * 100;
 
-    window.addEventListener('updateNodeOutput', handleNodeOutputUpdate as EventListener);
-    return () => {
-      window.removeEventListener('updateNodeOutput', handleNodeOutputUpdate as EventListener);
-    };
-  }, [pipeline, onChange]);
-
-  const removeNode = useCallback((nodeId: string) => {
-    setNodes((nds) => {
-      const updatedNodes = nds.filter(node => node.id !== nodeId);
-      onChange({ ...pipeline, nodes: updatedNodes });
-      return updatedNodes;
-    });
-    
-    // Also remove any edges connected to this node
-    setEdges((eds) => {
-      const updatedEdges = eds.filter(edge => edge.source !== nodeId && edge.target !== nodeId);
-      onChange({ ...pipeline, edges: updatedEdges });
-      return updatedEdges;
-    });
-  }, [pipeline, onChange]);
-
-  const startResizing = useCallback(() => {
-    setIsResizing(true);
-  }, []);
-
-  const stopResizing = useCallback(() => {
-    setIsResizing(false);
-  }, []);
-
-  const resize = useCallback((e: MouseEvent) => {
-    if (!isResizing) return;
-
-    const container = document.getElementById('pipeline-container');
-    if (!container) return;
-
-    const containerRect = container.getBoundingClientRect();
-    const newWidth = ((e.clientX - containerRect.left) / containerRect.width) * 100;
-    
-    // Limit the width between 30% and 70% of the container
-    const clampedWidth = Math.min(Math.max(newWidth, 30), 70);
-    setEditorWidth(clampedWidth);
-  }, [isResizing]);
-
-  React.useEffect(() => {
-    if (isResizing) {
-      window.addEventListener('mousemove', resize);
-      window.addEventListener('mouseup', stopResizing);
-    }
-
-    return () => {
-      window.removeEventListener('mousemove', resize);
-      window.removeEventListener('mouseup', stopResizing);
-    };
-  }, [isResizing, resize, stopResizing]);
-
-  const onNodesChange = (changes: any) => {
-    setNodes((nds) => {
-      const updatedNodes = applyNodeChanges(changes, nds);
-      onChange({ ...pipeline, nodes: updatedNodes });
-      return updatedNodes;
-    });
-  };
-
-  const onConnect = useCallback((connection: Connection) => {
-    setEdges((eds) => {
-      const updatedEdges = addEdge(connection, eds);
-      onChange({ ...pipeline, edges: updatedEdges });
-      return updatedEdges;
-    });
-
-    // Get the source and target nodes
-    const sourceNode = nodes.find(node => node.id === connection.source);
-    const targetNode = nodes.find(node => node.id === connection.target);
-
-    if (sourceNode && targetNode) {
-      // Update the target node with the source node's output as input
-      setNodes((nds) => {
-        const updatedNodes = nds.map(node => {
-          if (node.id === targetNode.id) {
-            // Keep the original prompt but add the input from the source node
-            return {
-              ...node,
-              data: {
-                ...node.data,
-                input: sourceNode.data.output || '', // Set the input to the source node's output
-                output: undefined // Reset the output since we're updating the input
-              }
-            };
-          }
-          return node;
-        });
-        onChange({ ...pipeline, nodes: updatedNodes });
-        return updatedNodes;
-      });
-    }
-  }, [nodes, pipeline, onChange]);
-
-  const createNodeTypes = useCallback((onRemove: (nodeId: string) => void) => ({
-    [NodeType.DATA_SOURCE]: (props: any) => {
-      console.log('Rendering DataSourceNode with props:', props);
-      return <DataSourceNode {...props} onRemove={onRemove} />;
+  // Handle node changes (including selection)
+  const handleNodeChanges = useCallback(
+    (changes: NodeChange[]) => {
+      console.error('Node changes:', changes);
+      onNodesChange(changes);
     },
-    [NodeType.PROMPT_TEMPLATE]: (props: any) => {
-      console.log('Rendering PromptTemplateNode with props:', props);
-      return <PromptNode {...props} onRemove={onRemove} />;
+    [onNodesChange]
+  );
+
+  // Handle edge changes
+  const handleEdgeChanges = useCallback(
+    (changes: EdgeChange[]) => {
+      console.error('Edge changes:', changes);
+      onEdgesChange(changes);
     },
-    [NodeType.SPREADSHEET]: (props: any) => {
-      console.log('Rendering SpreadsheetNode with props:', props);
-      return <SpreadsheetNode {...props} onRemove={onRemove} />;
+    [onEdgesChange]
+  );
+
+  // Handle new connections
+  const handleConnect = useCallback(
+    (connection: Connection) => {
+      console.error('New connection:', connection);
+      setEdges((eds) => addEdge(connection, eds));
     },
-    [NodeType.DISPLAY]: (props: any) => {
-      console.log('Rendering DisplayNode with props:', props);
-      return <DisplayNode {...props} onRemove={onRemove} />;
-    }
-  }), []);
+    [setEdges]
+  );
 
-  // Add a debug log to check if nodeTypes is being used
-  React.useEffect(() => {
-    console.log('Current nodeTypes:', createNodeTypes(removeNode));
-  }, [createNodeTypes, removeNode]);
+  // Handle node selection
+  const handleNodeClick = useCallback(
+    (event: React.MouseEvent, node: Node) => {
+      console.error('Node clicked:', { nodeId: node.id, event });
+      setSelectedNode(node.id);
+    },
+    []
+  );
 
-  const onAddNode = useCallback((type: NodeType) => {
-    // Find the lowest y position of existing nodes
-    const lowestY = nodes.reduce((maxY, node) => Math.max(maxY, node.position.y), 0);
-    
-    // Find the lowest node to get its x position
-    const lowestNode = nodes.reduce((lowest, node) => {
-      return node.position.y > lowest.position.y ? node : lowest;
-    }, nodes[0]);
-    
-    // Use the lowest node's x position for horizontal alignment
-    const xPosition = lowestNode ? lowestNode.position.x : (window.innerWidth / 2) - (NODE_WIDTH / 2);
-    
-    // Generate unique name if duplicate exists
-    let nodeName = `New ${type.replace('_', ' ')}`;
-    let counter = 1;
-    while (nodes.some(node => node.data.label === nodeName)) {
-      nodeName = `New ${type.replace('_', ' ')} (Copy ${counter})`;
-      counter++;
-    }
-
-    const newNode: FlowNode<NodeData> = {
-      id: `node-${Date.now()}`,
-      type: type,
-      position: {
-        x: xPosition,
-        y: lowestY + 100 // Place 100 pixels below the lowest node
-      },
-      data: { 
-        label: nodeName,
-        ...(type === NodeType.DATA_SOURCE && {
-          sourceType: 'csv',
-          sourceConfig: {},
-          input: '',
-          output: undefined,
-          tabId: `tab-${Date.now()}`
-        }),
-        ...(type === NodeType.PROMPT_TEMPLATE && {
-          prompt: '',
-          input: '',
-          output: undefined,
-          tabId: `tab-${Date.now()}`
-        }),
-        ...(type === NodeType.SPREADSHEET && {
-          sourceType: 'spreadsheet',
-          sourceConfig: {},
-          input: '',
-          output: undefined,
-          tabId: `tab-${Date.now()}`
-        }),
-        ...(type === NodeType.DISPLAY && {
-          displayType: 'table',
-          tabId: `tab-${Date.now()}`
-        })
-      }
-    };
-
-    setNodes((nds) => {
-      const updatedNodes = [...nds, newNode];
-      onChange({ ...pipeline, nodes: updatedNodes });
-      return updatedNodes;
-    });
-
-    if (lowestNode) {
-      // Create connection from bottom of lowest node to top of new node
-      const newEdge = {
-        id: `edge-${lowestNode.id}-${newNode.id}`,
-        source: lowestNode.id,
-        target: newNode.id,
-        type: 'smoothstep',
-        animated: true
-      };
-
-      setEdges((eds) => {
-        const updatedEdges = [...eds, newEdge];
-        onChange({ ...pipeline, edges: updatedEdges });
-        return updatedEdges;
-      });
-
-      // Update the new node with the input from the lowest node
-      setNodes((nds) => {
-        const updatedNodes = nds.map(node => {
-          if (node.id === newNode.id) {
-            return {
-              ...node,
-              data: {
-                ...node.data,
-                input: lowestNode.data.output || '',
-                output: undefined // Reset output since we're updating input
-              }
-            };
-          }
-          return node;
-        });
-        onChange({ ...pipeline, nodes: updatedNodes });
-        return updatedNodes;
-      });
-    }
-  }, [nodes, pipeline, onChange]);
-
-  const onTabDrop = useCallback((tabId: string, nodeId: string, tabName: string, content: string) => {
-    // We're dropping on the canvas
+  // Handle adding new nodes
+  const handleAddNode = useCallback((type: NodeType) => {
     const position = screenToFlowPosition({
       x: window.innerWidth / 2,
       y: window.innerHeight / 2,
     });
 
-    // Center the node on the drop position
-    const centeredPosition = {
-      x: position.x - NODE_WIDTH / 2,
-      y: position.y - NODE_HEIGHT / 2
-    };
-
-    // Generate unique name if duplicate exists
-    let nodeName = tabName;
-    let counter = 1;
-    while (nodes.some(node => node.data.label === nodeName)) {
-      nodeName = `${tabName} (Copy ${counter})`;
-      counter++;
+    let newNode: Node;
+    switch (type) {
+      case NodeType.DATA_SOURCE:
+        newNode = {
+          id: `node-${Date.now()}`,
+          type: 'dataSource',
+          position,
+          data: {
+            label: 'New Data Source',
+            sourceType: 'CSV',
+          },
+        };
+        break;
+      case NodeType.PROMPT_TEMPLATE:
+        newNode = {
+          id: `node-${Date.now()}`,
+          type: 'promptTemplate',
+          position,
+          data: {
+            label: 'New Prompt Template',
+            prompt: '',
+          },
+        };
+        break;
+      case NodeType.SPREADSHEET:
+        newNode = {
+          id: `node-${Date.now()}`,
+          type: 'spreadsheet',
+          position,
+          data: {
+            label: 'New Spreadsheet',
+            sourceType: 'sheets',
+          },
+        };
+        break;
+      case NodeType.DISPLAY:
+        newNode = {
+          id: `node-${Date.now()}`,
+          type: 'display',
+          position,
+          data: {
+            label: 'New Display',
+            displayType: 'text',
+          },
+        };
+        break;
+      default:
+        return;
     }
 
-    // Determine node type from the nodeId
-    const nodeType = nodeId.startsWith('data-source') 
-      ? NodeType.DATA_SOURCE 
-      : nodeId.startsWith('prompt-template')
-        ? NodeType.PROMPT_TEMPLATE
-        : nodeId.startsWith('spreadsheet')
-          ? NodeType.SPREADSHEET
-          : NodeType.DISPLAY;
+    console.error('Adding new node:', newNode);
+    setNodes((nds) => [...nds, newNode]);
+  }, [screenToFlowPosition, setNodes]);
 
-    // Find the closest node to get its output
-    const closestNode = findClosestNode(nodes, centeredPosition);
-    const sourceOutput = closestNode?.data.output || '';
+  // Handle keyboard events for node deletion
+  const handleRemoveNode = useCallback((nodeId: string) => {
+    console.error('Delete key pressed for node:', nodeId);
+    setNodes((nds) => nds.filter((node) => node.id !== nodeId));
+    setSelectedNode(null);
+  }, [setNodes]);
 
-    const newNode: FlowNode<NodeData> = {
-      id: `node-${Date.now()}`,
-      type: nodeType,
-      position: centeredPosition,
-      data: { 
-        label: nodeName,
-        ...(nodeType === NodeType.DATA_SOURCE && {
-          sourceType: 'csv',
-          sourceConfig: {}
-        }),
-        ...(nodeType === NodeType.PROMPT_TEMPLATE && {
-          prompt: content,  // Use the content from the tab
-          input: sourceOutput, // Set input to the source node's output
-          output: undefined,
-          tabId
-        }),
-        ...(nodeType === NodeType.SPREADSHEET && {
-          sourceType: 'spreadsheet',
-          sourceConfig: {},
-          input: sourceOutput,
-          output: undefined,
-          tabId
-        }),
-        ...(nodeType === NodeType.DISPLAY && {
-          displayType: 'table'
-        }),
-        tabId
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Delete' && selectedNode) {
+        handleRemoveNode(selectedNode);
       }
     };
-    
-    console.log('Creating new node from tab:', newNode);
-    
-    setNodes((nds) => {
-      const updatedNodes = [...nds, newNode];
-      onChange({ ...pipeline, nodes: updatedNodes });
-      return updatedNodes;
-    });
 
-    // Find and connect to closest node
-    if (closestNode) {
-      const newEdge = createConnection(closestNode, newNode);
-      setEdges((eds) => {
-        const updatedEdges = [...(eds || []), newEdge];
-        onChange({ ...pipeline, edges: updatedEdges });
-        return updatedEdges;
-      });
-    }
-  }, [nodes, pipeline, onChange, screenToFlowPosition]);
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedNode, handleRemoveNode]);
 
-  const onTabContentChange = useCallback((tabId: string, content: string) => {
-    console.log('Tab content changed:', { tabId, content });
-    
-    setNodes((nds) => {
-      const updatedNodes = nds.map(node => {
-        if (node.data.tabId === tabId) {
-          console.log('Updating node with new content:', { nodeId: node.id, content });
-          return {
-            ...node,
-            data: {
-              ...node.data,
-              prompt: content,
-              output: undefined // Reset output to trigger new Gemini call
-            }
-          };
-        }
-        return node;
-      });
-      onChange({ ...pipeline, nodes: updatedNodes });
-      return updatedNodes;
-    });
-  }, [pipeline, onChange]);
+  // Handle separator dragging
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    isDragging.current = true;
+    startX.current = e.clientX;
+    startWidth.current = editorWidth;
+    e.preventDefault();
+  }, [editorWidth]);
 
-  const onDrop = useCallback((event: React.DragEvent) => {
-    event.preventDefault();
-    event.stopPropagation();
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isDragging.current) return;
 
-    const nodeId = event.dataTransfer.getData('nodeId');
-    const tabId = event.dataTransfer.getData('tabId');
-    const tabName = event.dataTransfer.getData('tabName');
-    const tabContent = event.dataTransfer.getData('tabContent');
-
-    console.log('Drop event:', { nodeId, tabId, tabName, tabContent });
-
-    // Get the target node if we're dropping on a node
-    const targetNodeId = event.dataTransfer.getData('targetNodeId');
-    const targetNode = targetNodeId ? nodes.find(n => n.id === targetNodeId) : null;
-
-    if (targetNode) {
-      // We're dropping on a node
-      console.log('Dropping on node:', targetNode);
+      const deltaX = e.clientX - startX.current;
+      const newWidth = startWidth.current + deltaX;
       
-      // Update the target node's properties based on the dropped data
-      setNodes((nds) => {
-        const updatedNodes = nds.map(node => {
-          if (node.id === targetNodeId) {
-            return {
-              ...node,
-              data: {
-                ...node.data,
-                ...(nodeId.startsWith('data-source') && {
-                  sourceType: 'csv',
-                  sourceConfig: {}
-                }),
-                ...(nodeId.startsWith('prompt-template') && {
-                  prompt: tabContent,
-                  input: targetNode.data.input || '',
-                  output: undefined
-                }),
-                ...(nodeId.startsWith('spreadsheet') && {
-                  sourceType: 'spreadsheet',
-                  sourceConfig: {},
-                  input: targetNode.data.input || '',
-                  output: undefined
-                }),
-                ...(nodeId.startsWith('display') && {
-                  displayType: 'table'
-                }),
-                tabId
-              }
-            };
-          }
-          return node;
-        });
-        onChange({ ...pipeline, nodes: updatedNodes });
-        return updatedNodes;
-      });
-    } else {
-      // We're dropping on the canvas
-      const position = screenToFlowPosition({
-        x: event.clientX,
-        y: event.clientY,
-      });
-
-      // Center the node on the drop position
-      const centeredPosition = {
-        x: position.x - NODE_WIDTH / 2,
-        y: position.y - NODE_HEIGHT / 2
-      };
-
-      // Generate unique name if duplicate exists
-      let nodeName = tabName;
-      let counter = 1;
-      while (nodes.some(node => node.data.label === nodeName)) {
-        nodeName = `${tabName} (Copy ${counter})`;
-        counter++;
+      // Set minimum width of 200px for both panels
+      if (newWidth >= 200 && newWidth <= window.innerWidth - 200) {
+        setEditorWidth(newWidth);
       }
+    };
 
-      // Determine node type from the nodeId
-      const nodeType = nodeId.startsWith('data-source') 
-        ? NodeType.DATA_SOURCE 
-        : nodeId.startsWith('prompt-template')
-          ? NodeType.PROMPT_TEMPLATE
-          : nodeId.startsWith('spreadsheet')
-            ? NodeType.SPREADSHEET
-            : NodeType.DISPLAY;
+    const handleMouseUp = () => {
+      isDragging.current = false;
+    };
 
-      // Find the closest node to get its output
-      const closestNode = findClosestNode(nodes, centeredPosition);
-      const sourceOutput = closestNode?.data.output || '';
-
-      const newNode: FlowNode<NodeData> = {
-        id: `node-${Date.now()}`,
-        type: nodeType,
-        position: centeredPosition,
-        data: { 
-          label: nodeName,
-          ...(nodeType === NodeType.DATA_SOURCE && {
-            sourceType: 'csv',
-            sourceConfig: {}
-          }),
-          ...(nodeType === NodeType.PROMPT_TEMPLATE && {
-            prompt: tabContent,
-            input: sourceOutput,
-            output: undefined,
-            tabId
-          }),
-          ...(nodeType === NodeType.SPREADSHEET && {
-            sourceType: 'spreadsheet',
-            sourceConfig: {},
-            input: sourceOutput,
-            output: undefined,
-            tabId
-          }),
-          ...(nodeType === NodeType.DISPLAY && {
-            displayType: 'table'
-          }),
-          tabId
-        }
-      };
-      
-      console.log('Creating new node from drop:', newNode);
-      
-      setNodes((nds) => {
-        const updatedNodes = [...nds, newNode];
-        onChange({ ...pipeline, nodes: updatedNodes });
-        return updatedNodes;
-      });
-
-      // Find and connect to closest node
-      if (closestNode) {
-        const newEdge = createConnection(closestNode, newNode);
-        setEdges((eds) => {
-          const updatedEdges = [...(eds || []), newEdge];
-          onChange({ ...pipeline, edges: updatedEdges });
-          return updatedEdges;
-        });
-      }
-    }
-  }, [nodes, pipeline, onChange, screenToFlowPosition]);
-
-  const onNodeDragOver = useCallback((event: React.DragEvent) => {
-    event.preventDefault();
-    event.stopPropagation();
-
-    // Get the target node if we're dragging over a node
-    const targetNodeId = event.dataTransfer.getData('targetNodeId');
-    const targetNode = targetNodeId ? nodes.find(n => n.id === targetNodeId) : null;
-
-    if (targetNode) {
-      // We're dragging over a node
-      console.log('Dragging over node:', targetNode);
-      
-      // Update the target node's properties based on the dragged data
-      setNodes((nds) => {
-        const updatedNodes = nds.map(node => {
-          if (node.id === targetNodeId) {
-            return {
-              ...node,
-              data: {
-                ...node.data,
-                ...(event.dataTransfer.getData('nodeId').startsWith('data-source') && {
-                  sourceType: 'csv',
-                  sourceConfig: {}
-                }),
-                ...(event.dataTransfer.getData('nodeId').startsWith('prompt-template') && {
-                  prompt: event.dataTransfer.getData('tabContent'),
-                  input: targetNode.data.input || '',
-                  output: undefined
-                }),
-                ...(event.dataTransfer.getData('nodeId').startsWith('spreadsheet') && {
-                  sourceType: 'spreadsheet',
-                  sourceConfig: {},
-                  input: targetNode.data.input || '',
-                  output: undefined
-                }),
-                ...(event.dataTransfer.getData('nodeId').startsWith('display') && {
-                  displayType: 'table'
-                }),
-                tabId: event.dataTransfer.getData('tabId')
-              }
-            };
-          }
-          return node;
-        });
-        onChange({ ...pipeline, nodes: updatedNodes });
-        return updatedNodes;
-      });
-    }
-  }, [nodes, pipeline, onChange]);
-
-  const handleClearAll = useCallback(() => {
-    setNodes([]);
-    setEdges([]);
-    onChange({ ...pipeline, nodes: [], edges: [] });
-  }, [pipeline, onChange]);
-
-  const handleEdgeContextMenu = useCallback((event: React.MouseEvent, edge: Edge) => {
-    event.preventDefault();
-    setContextMenu({
-      mouseX: event.clientX,
-      mouseY: event.clientY,
-      nodeId: '',
-      edgeId: edge.id
-    });
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
   }, []);
 
-  const handleDeleteEdge = useCallback((edgeId: string) => {
-    setEdges(edges => {
-      const updatedEdges = edges.filter(edge => edge.id !== edgeId);
-      onChange({ ...pipeline, edges: updatedEdges });
-      return updatedEdges;
-    });
-    setContextMenu(null);
-  }, [pipeline, onChange]);
+  // Handle tab drop
+  const handleTabDrop = useCallback((tabId: string, nodeId: string, tabName: string, content: string) => {
+    console.error('Tab dropped:', { tabId, nodeId, tabName, content });
+    // Update node data with the dropped tab content
+    setNodes((nds) =>
+      nds.map((node) =>
+        node.id === nodeId
+          ? {
+              ...node,
+              data: {
+                ...node.data,
+                label: tabName,
+                sourceType: content.includes('{') ? 'JSON' : 'CSV',
+              },
+            }
+          : node
+      )
+    );
+  }, [setNodes]);
 
-  // Close context menu when clicking outside
-  React.useEffect(() => {
-    const handleClickOutside = () => {
-      setContextMenu(null);
-    };
-
-    if (contextMenu) {
-      document.addEventListener('click', handleClickOutside);
-    }
-
-    return () => {
-      document.removeEventListener('click', handleClickOutside);
-    };
-  }, [contextMenu]);
-
-  console.log('Initial nodes:', pipeline.nodes);
-  console.log('Current nodes:', nodes);
-  console.log('Node types:', createNodeTypes(removeNode));
-  console.log('NodeType enum:', NodeType);
+  // Handle tab content change
+  const handleTabContentChange = useCallback((tabId: string, content: string) => {
+    console.error('Tab content changed:', { tabId, content });
+    // Handle tab content changes if needed
+  }, []);
 
   return (
-    <div id="pipeline-container" style={{ 
-      width: '100%', 
-      height: '100vh', 
-      display: 'flex',
-      fontFamily: '"Open Sans", sans-serif'
-    }}>
-      <div style={{ width: `${editorWidth}%`, height: '100vh' }}>
+    <div style={{ width: '100vw', height: '100vh', display: 'flex' }}>
+      <div style={{ width: editorWidth, height: '100%', overflow: 'hidden' }}>
         <EditorPanel 
-          onTabDrop={onTabDrop}
-          onTabContentChange={onTabContentChange}
+          onTabDrop={handleTabDrop}
+          onTabContentChange={handleTabContentChange}
         />
       </div>
-      <div 
+      <div
         style={{
           width: '8px',
-          height: '100vh',
-          background: '#e0e0e0',
+          height: '100%',
+          backgroundColor: '#ddd',
           cursor: 'col-resize',
           display: 'flex',
           alignItems: 'center',
-          justifyContent: 'center'
+          justifyContent: 'center',
+          position: 'relative',
         }}
-        onMouseDown={startResizing}
+        onMouseDown={handleMouseDown}
       >
-        <div style={{
-          width: '2px',
-          height: '100%',
-          background: '#bdbdbd'
-        }} />
+        <div
+          style={{
+            width: '2px',
+            height: '100%',
+            backgroundColor: '#999',
+            position: 'absolute',
+            left: '3px',
+          }}
+        />
       </div>
-      <div style={{ width: `${100 - editorWidth}%`, height: '100vh' }}>
-        <Toolbar onAddNode={onAddNode} editorWidth={editorWidth} />
-      <ReactFlow
-        nodes={nodes}
-        edges={edges}
-        onNodesChange={onNodesChange}
-        onConnect={onConnect}
-          nodeTypes={createNodeTypes(removeNode)}
-          onEdgeContextMenu={handleEdgeContextMenu}
-          onDrop={onDrop}
-          onDragOver={onNodeDragOver}
-        fitView
+      <div style={{ flex: 1, height: '100%', overflow: 'hidden', position: 'relative' }}>
+        <ReactFlow
+          nodes={nodes}
+          edges={edges}
+          onNodesChange={handleNodeChanges}
+          onEdgesChange={handleEdgeChanges}
+          onConnect={handleConnect}
+          onNodeClick={handleNodeClick}
+          nodeTypes={nodeTypes}
           nodesDraggable={true}
           nodesConnectable={true}
           elementsSelectable={true}
-          style={{ fontFamily: '"Open Sans", sans-serif' }}
-      >
-        <Background />
-        <Controls />
-          <Panel position="top-right">
-            <button
-              onClick={handleClearAll}
-              style={{
-                padding: '8px 16px',
-                background: '#ff4444',
-                color: 'white',
-                border: 'none',
-                borderRadius: '4px',
-                cursor: 'pointer',
-                fontSize: '14px',
-                fontWeight: '500',
-                transition: 'background-color 0.2s',
-                boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-                fontFamily: '"Open Sans", sans-serif'
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.background = '#ff6666';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background = '#ff4444';
-              }}
-            >
-              Clear All
-            </button>
-          </Panel>
-      </ReactFlow>
-        {contextMenu && (
-          <ContextMenu
-            x={contextMenu.mouseX}
-            y={contextMenu.mouseY}
-            onClose={() => setContextMenu(null)}
-            onDelete={() => handleDeleteEdge(contextMenu.edgeId)}
-          />
-        )}
+          fitView
+        >
+          <Background />
+          <Controls />
+          <Toolbar onAddNode={handleAddNode} editorWidth={editorWidthPercentage} />
+        </ReactFlow>
       </div>
     </div>
   );
-}; 
+}
 
-export const PipelineEditor: React.FC<PipelineEditorProps> = (props) => {
+export function PipelineEditor() {
   return (
     <ReactFlowProvider>
-      <PipelineEditorContent {...props} />
+      <PipelineEditorContent />
     </ReactFlowProvider>
   );
-}; 
+} 
