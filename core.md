@@ -61,6 +61,7 @@ For the tabbed text editor, I want to use Ace the editor with the appropriate sy
 * For prompt node linked to a Prompt tab, the prompt tab content should be automatically executed as a prompt using our gemini integration. 
 * if the output is to large to fit within 100px, then turn that view into a scrollable view
 * If the prompt node is the target node to which a source node connects, then display the a view in the prompt node marked input 
+* When two nodes in the graph are connected, then the output of the starting node becomes the input for the node its connected to, and the output content is used to replace the text "INPUT" in the receiving node.
 
 * Double-clicking on the output field creates a tab of type "Output" with the name matching the label + "Output"
 * if there is an existing output tab with the same name,  then create new tabs with the label + "Output" plus a number, like Prompt1 Output 1, Prompt1 Output 2, and so on 
@@ -75,7 +76,7 @@ INPUT```
 
 two changes: (1) let's make the font smaller for the prompt output. (2) double-clicking on the output should create a new "Output" tab with the output, and named "TAB_NAME Output"
 
-We will add new functionality. when two nodes in the graph are connected, then the output of the starting node becomes the input for the node its connected to, and the output content is used to replace the text "INPUT" in the receiving node.
+
 
 What's missing still is that we're not copying the output of the previous node to a new field "input" that we add to the receiving end of the connector.
  
