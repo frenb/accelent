@@ -18,6 +18,7 @@ interface Tab {
 interface EditorPanelProps {
   onTabDrop: (tabId: string, nodeId: string | null, tabName: string, content: string, dropPosition?: { x: number, y: number }) => void;
   onTabContentChange: (tabId: string, content: string) => void;
+  onAddOutputTab?: (name: string, content: string) => void;
 }
 
 const GEMINI_API_KEY = process.env.REACT_APP_GEMINI_API_KEY;
@@ -27,7 +28,7 @@ if (!GEMINI_API_KEY) {
   console.warn('REACT_APP_GEMINI_API_KEY is not set. Content classification will not work.');
 }
 
-export const EditorPanel: React.FC<EditorPanelProps> = ({ onTabDrop, onTabContentChange }) => {
+export const EditorPanel: React.FC<EditorPanelProps> = ({ onTabDrop, onTabContentChange, onAddOutputTab }) => {
   const [tabs, setTabs] = useState<Tab[]>([
     {
       id: 'Dataset 1',

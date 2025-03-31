@@ -316,13 +316,13 @@ function PipelineEditorContent() {
     );
   }, [setNodes]);
 
-  const handleTabAdd = useCallback((name: string, content: string, type: string) => {
+  const handleTabAdd = useCallback((name: string, content: string) => {
     // Create a new tab with the given name, content, and type
     const newTab = {
       id: `tab-${Date.now()}`,
       name,
       content,
-      type
+      type: 'output'  // Default type for output tabs
     };
     
     // Add the new tab to the tabs state
@@ -348,6 +348,7 @@ function PipelineEditorContent() {
         <EditorPanel 
           onTabDrop={handleTabDrop}
           onTabContentChange={handleTabContentChange}
+          onAddOutputTab={handleTabAdd}
         />
       </div>
       <div
