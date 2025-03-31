@@ -114,7 +114,7 @@ function PipelineEditorContent() {
   }, [nodes]);
 
   // Handle adding new nodes
-  const handleAddNode = useCallback((type: NodeType, position?: { x: number; y: number }) => {
+  const handleAddNode = useCallback((type: NodeType, position?: { x: number; y: number }, tabData?: { name: string, content: string }) => {
     const nodePosition = position || screenToFlowPosition({
       x: window.innerWidth / 2,
       y: window.innerHeight / 2,
@@ -128,8 +128,9 @@ function PipelineEditorContent() {
           type: 'dataSource',
           position: nodePosition,
           data: {
-            label: createUniqueNodeName('New Data Source'),
-            sourceType: 'CSV',
+            label: tabData ? createUniqueNodeName(tabData.name) : createUniqueNodeName('New Data Source'),
+            sourceType: tabData?.content.includes('{') ? 'JSON' : 'CSV',
+            content: tabData?.content || '',
           },
         };
         break;
@@ -139,8 +140,9 @@ function PipelineEditorContent() {
           type: 'promptTemplate',
           position: nodePosition,
           data: {
-            label: createUniqueNodeName('New Prompt Template'),
-            prompt: '',
+            label: tabData ? createUniqueNodeName(tabData.name) : createUniqueNodeName('New Prompt Template'),
+            prompt: tabData?.content || '',
+            content: tabData?.content || '',
           },
         };
         break;
@@ -150,8 +152,9 @@ function PipelineEditorContent() {
           type: 'spreadsheet',
           position: nodePosition,
           data: {
-            label: createUniqueNodeName('New Spreadsheet'),
+            label: tabData ? createUniqueNodeName(tabData.name) : createUniqueNodeName('New Spreadsheet'),
             sourceType: 'sheets',
+            content: tabData?.content || '',
           },
         };
         break;
@@ -161,8 +164,9 @@ function PipelineEditorContent() {
           type: 'display',
           position: nodePosition,
           data: {
-            label: createUniqueNodeName('New Display'),
+            label: tabData ? createUniqueNodeName(tabData.name) : createUniqueNodeName('New Display'),
             displayType: 'text',
+            content: tabData?.content || '',
           },
         };
         break;
@@ -279,7 +283,7 @@ function PipelineEditorContent() {
         nodeType = NodeType.DISPLAY;
       }
 
-      handleAddNode(nodeType, position);
+      handleAddNode(nodeType, position, { name: tabName, content: content });
     }
   }, [setNodes, screenToFlowPosition, handleAddNode]);
 
@@ -362,7 +366,7 @@ function PipelineEditorContent() {
                 nodeType = NodeType.DISPLAY;
               }
 
-              handleAddNode(nodeType, position);
+              handleAddNode(nodeType, position, { name: tabName, content: tabContent });
             }
           }}
         >
