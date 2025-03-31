@@ -1,18 +1,17 @@
 import React, { useEffect, useState } from 'react';
 import { Handle, Position, NodeProps } from 'reactflow';
 import { useReactFlow } from 'reactflow';
+import { NodeData } from '../../types/Pipeline';
 
-interface PromptTemplateData {
-  label: string;
-  prompt: string;
-  input: string;
-  output: string;
-  tabId: string;
+interface PromptTemplateNodeProps extends NodeProps<NodeData> {
+  onTabAdd: (name: string, content: string, type: string) => void;
+  onDelete?: (id: string) => void;
 }
 
-export function PromptTemplateNode({ data, id }: NodeProps<PromptTemplateData>) {
+export const PromptTemplateNode: React.FC<PromptTemplateNodeProps> = ({ data, id, onTabAdd, onDelete }) => {
+  const [inputData, setInputData] = useState<string>('');
   const [output, setOutput] = useState<string>('');
-  const [isLoading, setIsLoading] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { getEdges, getNode, setNodes, getNodes } = useReactFlow();
 
@@ -44,12 +43,30 @@ export function PromptTemplateNode({ data, id }: NodeProps<PromptTemplateData>) 
           return node;
         });
         setNodes(updatedNodes);
+        setInputData(sourceNode.data.output || '');
       }
+    } else {
+      // If no input connection, clear the input data
+      const nodes = getNodes();
+      const updatedNodes = nodes.map(node => {
+        if (node.id === id) {
+          return {
+            ...node,
+            data: {
+              ...node.data,
+              input: ''
+            }
+          };
+        }
+        return node;
+      });
+      setNodes(updatedNodes);
+      setInputData('');
     }
   };
 
   // Function to update node data
-  const updateNodeData = (newData: Partial<PromptTemplateData>) => {
+  const updateNodeData = (newData: Partial<NodeData>) => {
     const nodes = getNodes();
     const updatedNodes = nodes.map(node => {
       if (node.id === id) {
@@ -66,11 +83,38 @@ export function PromptTemplateNode({ data, id }: NodeProps<PromptTemplateData>) 
     setNodes(updatedNodes);
   };
 
+  // Function to create a unique output tab name
+  const createUniqueOutputName = (baseName: string) => {
+    let newName = `${baseName} Output`;
+    let counter = 1;
+
+    // Keep trying until we find a unique name
+    while (true) {
+      try {
+        // Try to create a tab with this name
+        onTabAdd(newName, '', 'output');
+        return newName;
+      } catch {
+        // If tab creation fails (name exists), try with counter
+        newName = `${baseName} Output ${counter}`;
+        counter++;
+      }
+    }
+  };
+
+  // Handle double-click on output field
+  const handleOutputDoubleClick = () => {
+    if (output && onTabAdd) {
+      const uniqueName = createUniqueOutputName(data.label);
+      onTabAdd(uniqueName, output, 'output');
+    }
+  };
+
   // Function to execute the prompt
   const executePrompt = async () => {
     if (!data.prompt) return;
 
-    setIsLoading(true);
+    setLoading(true);
     setError(null);
 
     try {
@@ -102,20 +146,13 @@ export function PromptTemplateNode({ data, id }: NodeProps<PromptTemplateData>) 
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred');
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
   };
 
   // Update input data when edges change or when source node output changes
   useEffect(() => {
-    const edges = getEdges();
-    const inputEdge = edges.find(edge => edge.target === id);
-    if (inputEdge) {
-      const sourceNode = getNode(inputEdge.source);
-      if (sourceNode) {
-        updateInputData();
-      }
-    }
+    updateInputData();
   }, [getEdges(), getNode]);
 
   // Execute prompt when prompt or input changes
@@ -129,72 +166,147 @@ export function PromptTemplateNode({ data, id }: NodeProps<PromptTemplateData>) 
 
   return (
     <div style={{
+      background: 'white',
+      border: '1px solid #ccc',
+      borderRadius: '4px',
       padding: '10px',
-      borderRadius: '5px',
-      background: '#fff',
-      border: '1px solid #ddd',
       minWidth: '200px',
-      maxWidth: '300px',
+      maxWidth: '300px'
     }}>
       <Handle type="target" position={Position.Top} />
-      <div style={{ marginBottom: '10px' }}>
-        <strong>{data.label}</strong>
-      </div>
-
-      {/* Input Section */}
-      {hasInputConnection() && (
-        <div style={{ marginBottom: '10px' }}>
-          <div style={{ fontSize: '12px', color: '#666', marginBottom: '4px' }}>INPUT</div>
+      <div style={{
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '8px'
+      }}>
+        <div style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          paddingBottom: '8px',
+          borderBottom: '1px solid #eee'
+        }}>
           <div style={{
-            padding: '8px',
-            background: '#f5f5f5',
-            borderRadius: '4px',
-            fontSize: '12px',
-            maxHeight: '100px',
-            overflow: 'auto'
-          }}>
-            {data.input}
-          </div>
-        </div>
-      )}
-
-      {/* Prompt Section */}
-      <div style={{ marginBottom: '10px' }}>
-        <div style={{ fontSize: '12px', color: '#666', marginBottom: '4px' }}>PROMPT</div>
-        <div style={{
-          padding: '8px',
-          background: '#f5f5f5',
-          borderRadius: '4px',
-          fontSize: '12px',
-          maxHeight: '100px',
-          overflow: 'auto'
-        }}>
-          {data.prompt}
-        </div>
-      </div>
-
-      {/* Output Section */}
-      <div>
-        <div style={{ fontSize: '12px', color: '#666', marginBottom: '4px' }}>GENERATED OUTPUT</div>
-        <div style={{
-          padding: '8px',
-          background: '#f5f5f5',
-          borderRadius: '4px',
-          fontSize: '12px',
-          maxHeight: '100px',
-          overflow: 'auto'
-        }}>
-          {isLoading ? (
-            <div style={{ color: '#666' }}>Generating...</div>
-          ) : error ? (
-            <div style={{ color: '#d32f2f' }}>{error}</div>
-          ) : (
-            output
+            fontWeight: 'bold',
+            color: '#333'
+          }}>{data.label}</div>
+          {onDelete && (
+            <button 
+              style={{
+                background: 'none',
+                border: 'none',
+                color: '#999',
+                fontSize: '20px',
+                cursor: 'pointer',
+                padding: '0 4px',
+                lineHeight: 1
+              }}
+              onMouseOver={(e) => e.currentTarget.style.color = '#ff4444'}
+              onMouseOut={(e) => e.currentTarget.style.color = '#999'}
+              onClick={() => onDelete(id)}
+            >
+              ×
+            </button>
           )}
         </div>
+        {hasInputConnection() && (
+          <div style={{
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '4px'
+          }}>
+            <div style={{
+              fontSize: '12px',
+              color: '#666',
+              textTransform: 'uppercase'
+            }}>INPUT</div>
+            <div style={{
+              background: '#f5f5f5',
+              borderRadius: '4px',
+              padding: '8px',
+              minHeight: '60px',
+              maxHeight: '100px',
+              overflowY: 'auto'
+            }}>
+              {inputData ? (
+                <div style={{
+                  whiteSpace: 'pre-wrap',
+                  wordBreak: 'break-word'
+                }}>{inputData}</div>
+              ) : (
+                <div style={{
+                  color: '#999',
+                  fontStyle: 'italic'
+                }}>No input data</div>
+              )}
+            </div>
+          </div>
+        )}
+        <div style={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '4px'
+        }}>
+          <div style={{
+            fontSize: '12px',
+            color: '#666',
+            textTransform: 'uppercase'
+          }}>PROMPT</div>
+          <div style={{
+            background: '#f5f5f5',
+            borderRadius: '4px',
+            padding: '8px',
+            minHeight: '60px',
+            maxHeight: '100px',
+            overflowY: 'auto'
+          }}>
+            <div style={{
+              whiteSpace: 'pre-wrap',
+              wordBreak: 'break-word'
+            }}>{data.prompt}</div>
+          </div>
+        </div>
+        <div style={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '4px'
+        }}>
+          <div style={{
+            fontSize: '12px',
+            color: '#666',
+            textTransform: 'uppercase'
+          }}>GENERATED OUTPUT</div>
+          <div 
+            style={{
+              background: '#f5f5f5',
+              borderRadius: '4px',
+              padding: '8px',
+              minHeight: '60px',
+              maxHeight: '100px',
+              overflowY: 'auto',
+              cursor: output ? 'pointer' : 'default'
+            }}
+            onDoubleClick={handleOutputDoubleClick}
+          >
+            {loading ? (
+              <div style={{ color: '#666' }}>Generating...</div>
+            ) : error ? (
+              <div style={{ color: '#ff4444' }}>{error}</div>
+            ) : output ? (
+              <div style={{
+                whiteSpace: 'pre-wrap',
+                wordBreak: 'break-word'
+              }}>{output}</div>
+            ) : (
+              <div style={{
+                color: '#999',
+                fontStyle: 'italic'
+              }}>No output generated</div>
+            )}
+          </div>
+        </div>
       </div>
-
       <Handle type="source" position={Position.Bottom} />
     </div>
   );
-} 
+}; 

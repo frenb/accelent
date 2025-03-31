@@ -1,5 +1,5 @@
-import React, { useCallback, useState, useEffect, useRef } from 'react';
-import ReactFlow, {
+import React, { useCallback, useState, useEffect, useRef, useMemo } from 'react';
+import ReactFlow, { 
   Node,
   Edge,
   Controls,
@@ -13,19 +13,16 @@ import ReactFlow, {
   NodeTypes,
   useReactFlow,
   ReactFlowProvider,
+  NodeProps,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { DataSourceNode } from './components/nodes/DataSourceNode';
 import { PromptTemplateNode } from './components/nodes/PromptTemplateNode';
+import { SpreadsheetNode } from './components/nodes/SpreadsheetNode';
+import { DisplayNode } from './components/nodes/DisplayNode';
 import { Toolbar } from './components/Toolbar';
 import { EditorPanel } from './components/EditorPanel';
-import { NodeType } from './types/Pipeline';
-
-// Define node types
-const nodeTypes: NodeTypes = {
-  dataSource: DataSourceNode,
-  promptTemplate: PromptTemplateNode,
-};
+import { NodeType, NodeData } from './types/Pipeline';
 
 // Initial nodes
 const initialNodes: Node[] = [];
@@ -311,6 +308,21 @@ function PipelineEditorContent() {
     );
   }, [setNodes]);
 
+  const handleTabAdd = useCallback((name: string, content: string, type: string) => {
+    // TODO: Implement tab adding logic
+    console.log('Adding tab:', { name, content, type });
+  }, []);
+
+  // Define node types
+  const nodeTypes = useMemo(() => ({
+    dataSource: (props: NodeProps<NodeData>) => (
+      <DataSourceNode {...props} onDelete={handleRemoveNode} />
+    ),
+    promptTemplate: (props: NodeProps<NodeData>) => (
+      <PromptTemplateNode {...props} onDelete={handleRemoveNode} onTabAdd={handleTabAdd} />
+    ),
+  }), [handleRemoveNode, handleTabAdd]) as NodeTypes;
+
   return (
     <div style={{ width: '100vw', height: '100vh', display: 'flex' }}>
       <div style={{ width: editorWidth, height: '100%', overflow: 'hidden' }}>
@@ -343,9 +355,9 @@ function PipelineEditorContent() {
         />
       </div>
       <div style={{ flex: 1, height: '100%', overflow: 'hidden', position: 'relative' }}>
-        <ReactFlow
-          nodes={nodes}
-          edges={edges}
+      <ReactFlow
+        nodes={nodes}
+        edges={edges}
           onNodesChange={handleNodeChanges}
           onEdgesChange={handleEdgeChanges}
           onConnect={handleConnect}
@@ -354,7 +366,7 @@ function PipelineEditorContent() {
           nodesDraggable={true}
           nodesConnectable={true}
           elementsSelectable={true}
-          fitView
+        fitView
           onDragOver={(event) => {
             event.preventDefault();
             event.dataTransfer.dropEffect = 'copy';
@@ -409,11 +421,11 @@ function PipelineEditorContent() {
               });
             }
           }}
-        >
-          <Background />
-          <Controls />
+      >
+        <Background />
+        <Controls />
           <Toolbar onAddNode={handleAddNode} editorWidth={editorWidthPercentage} />
-        </ReactFlow>
+      </ReactFlow>
       </div>
     </div>
   );
