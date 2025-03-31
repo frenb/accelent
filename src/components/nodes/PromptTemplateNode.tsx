@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { Handle, Position, NodeProps } from 'reactflow';
 import { useReactFlow } from 'reactflow';
 import { NodeData } from '../../types/Pipeline';
@@ -85,30 +85,24 @@ export const PromptTemplateNode: React.FC<PromptTemplateNodeProps> = ({ data, id
 
   // Function to create a unique output tab name
   const createUniqueOutputName = (baseName: string) => {
-    let newName = `${baseName} Output`;
-    let counter = 1;
-
-    // Keep trying until we find a unique name
-    while (true) {
-      try {
-        // Try to create a tab with this name
-        onTabAdd(newName, '', 'output');
-        return newName;
-      } catch {
-        // If tab creation fails (name exists), try with counter
-        newName = `${baseName} Output ${counter}`;
-        counter++;
-      }
-    }
+    return `${baseName} Output`;
   };
 
   // Handle double-click on output field
-  const handleOutputDoubleClick = () => {
+  const handleOutputDoubleClick = useCallback(() => {
+    console.log('handleOutputDoubleClick called');
+    console.log('Current output:', output);
+    console.log('onTabAdd callback:', onTabAdd);
+    console.log('Node label:', data.label);
+    console.log('Node output:', data.output);
+
     if (output && onTabAdd) {
-      const uniqueName = createUniqueOutputName(data.label);
-      onTabAdd(uniqueName, output, 'output');
+      console.log('Creating new tab with output:', output);
+      onTabAdd(data.label, output, 'output');
+    } else {
+      console.log('Cannot create tab - missing output or callback:', { output, onTabAdd });
     }
-  };
+  }, [output, onTabAdd, data.label, data.output]);
 
   // Function to execute the prompt
   const executePrompt = async () => {

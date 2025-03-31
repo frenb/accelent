@@ -18,7 +18,11 @@ interface Tab {
 interface EditorPanelProps {
   onTabDrop: (tabId: string, nodeId: string | null, tabName: string, content: string, dropPosition?: { x: number, y: number }) => void;
   onTabContentChange: (tabId: string, content: string) => void;
-  onAddOutputTab?: (name: string, content: string) => void;
+  onAddOutputTab?: (name: string, content: string, type: string) => void;
+  onAddTab: (tab: Tab) => void;
+  onUpdateTab: (tab: Tab) => void;
+  onDeleteTab: (tabId: string) => void;
+  tabs: Tab[];
 }
 
 const GEMINI_API_KEY = process.env.REACT_APP_GEMINI_API_KEY;
@@ -28,87 +32,8 @@ if (!GEMINI_API_KEY) {
   console.warn('REACT_APP_GEMINI_API_KEY is not set. Content classification will not work.');
 }
 
-export const EditorPanel: React.FC<EditorPanelProps> = ({ onTabDrop, onTabContentChange, onAddOutputTab }) => {
-  const [tabs, setTabs] = useState<Tab[]>([
-    {
-      id: 'Dataset 1',
-      name: 'Dataset 1',
-      content: `{
-  "tactics": [
-    {
-      "id": "TA0001",
-      "name": "Initial Access",
-      "description": "Techniques used to gain initial access to a network"
-    },
-    {
-      "id": "TA0002",
-      "name": "Execution",
-      "description": "Techniques that result in execution of adversary-controlled code"
-    }
-  ]
-}`,
-      type: 'data',
-      color: '#4CAF50',
-      classification: {
-        type: 'dataset',
-        format: 'json',
-        confidence: 0.8
-      }
-    },
-    {
-      id: 'Prompt 1',
-      name: 'Prompt 1',
-      content: `Create a list of top 10 MITRE tactics, format as JSON with the following structure:
-{
-  "tactics": [
-    {
-      "id": "TA0001",
-      "name": "Tactic Name",
-      "description": "Tactic Description"
-    }
-  ]
-}`,
-      type: 'prompt',
-      color: '#4a90e2',
-      classification: {
-        type: 'prompt',
-        confidence: 0.8
-      }
-    },
-    {
-      id: 'Dataset 2',
-      name: 'Dataset 2',
-      content: `id,name,description
-TA0001,Initial Access,Techniques used to gain initial access to a network
-TA0002,Execution,Techniques that result in execution of adversary-controlled code`,
-      type: 'data',
-      color: '#4CAF50',
-      classification: {
-        type: 'dataset',
-        format: 'csv',
-        confidence: 0.8
-      }
-    },
-    {
-      id: 'Dataset 3',
-      name: 'Dataset 3',
-      content: `tactics:
-  - id: TA0001
-    name: Initial Access
-    description: Techniques used to gain initial access to a network
-  - id: TA0002
-    name: Execution
-    description: Techniques that result in execution of adversary-controlled code`,
-      type: 'data',
-      color: '#4CAF50',
-      classification: {
-        type: 'dataset',
-        format: 'yaml',
-        confidence: 0.8
-      }
-    }
-  ]);
-  const [activeTab, setActiveTab] = useState<string>('Dataset 1');
+export const EditorPanel: React.FC<EditorPanelProps> = ({ onTabDrop, onTabContentChange, onAddOutputTab, onAddTab, onUpdateTab, onDeleteTab, tabs }) => {
+  const [activeTab, setActiveTab] = useState<string>(tabs[0]?.id || '');
   const [newTabName, setNewTabName] = useState('');
   const [editingTabId, setEditingTabId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState('');
@@ -119,27 +44,73 @@ TA0002,Execution,Techniques that result in execution of adversary-controlled cod
   const [fontSize, setFontSize] = useState(14);
   const [editorMode, setEditorMode] = useState('javascript');
 
+  const getEditorMode = (tab: Tab) => {
+    if (!tab.classification) return 'javascript';
+    
+    switch (tab.classification.type) {
+      case 'dataset':
+        switch (tab.classification.format) {
+          case 'json':
+            return 'json';
+          case 'csv':
+            return 'csv';
+          case 'yaml':
+            return 'yaml';
+          default:
+            return 'javascript';
+        }
+      case 'prompt':
+        return 'markdown';
+      default:
+        return 'javascript';
+    }
+  };
+
+  const handleDragStart = (event: React.DragEvent, tab: Tab) => {
+    const nodeType = getTabType(tab);
+    event.dataTransfer.setData('text/plain', tab.id);
+    event.dataTransfer.setData('nodeId', nodeType);
+    event.dataTransfer.setData('tabName', tab.name);
+    event.dataTransfer.setData('tabContent', tab.content);
+    event.dataTransfer.setData('tabId', tab.id);
+    event.dataTransfer.setData('tabType', nodeType);
+    event.dataTransfer.setData('sourceType', tab.classification?.type || 'dataset');
+    event.dataTransfer.setData('sourceConfig', JSON.stringify({
+      type: tab.classification?.type || 'dataset',
+      format: tab.classification?.format || 'json'
+    }));
+    event.dataTransfer.effectAllowed = 'copy';
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+  };
+
+  const getTabType = (tab: Tab) => {
+    if (!tab.classification) return 'data-source';
+    
+    switch (tab.classification.type) {
+      case 'dataset':
+        return 'data-source';
+      case 'prompt':
+        return 'prompt-template';
+      case 'sheets':
+        return 'spreadsheet';
+      default:
+        return 'data-source';
+    }
+  };
+
   // Add event listener for creating output tabs
   React.useEffect(() => {
     console.error('Setting up createOutputTab event listener');
     const handleCreateOutputTab = (event: CustomEvent) => {
       console.error('Received createOutputTab event:', event.detail);
-      const { name, content, type, color } = event.detail;
-      const newTab: Tab = {
-        id: `output-${Date.now()}`,
-        name,
-        content,
-        type: type || 'display',
-        color: color || '#9C27B0',
-        classification: {
-          type: 'dataset',
-          format: 'json',
-          confidence: 0.8
-        }
-      };
-      console.error('Creating new tab:', newTab);
-      setTabs(prevTabs => [...prevTabs, newTab]);
-      setActiveTab(newTab.id);
+      const { name, content, type } = event.detail;
+      if (onAddOutputTab) {
+        onAddOutputTab(name, content, type);
+      }
     };
 
     window.addEventListener('createOutputTab', handleCreateOutputTab as EventListener);
@@ -149,7 +120,91 @@ TA0002,Execution,Techniques that result in execution of adversary-controlled cod
       window.removeEventListener('createOutputTab', handleCreateOutputTab as EventListener);
       console.error('createOutputTab event listener removed');
     };
-  }, []);
+  }, [onAddOutputTab]);
+
+  // Update active tab when tabs change
+  useEffect(() => {
+    if (tabs.length > 0 && !tabs.find(tab => tab.id === activeTab)) {
+      setActiveTab(tabs[0].id);
+    }
+  }, [tabs, activeTab]);
+
+  // Update editor mode when active tab changes
+  useEffect(() => {
+    const currentTab = tabs.find(tab => tab.id === activeTab);
+    if (currentTab) {
+      setEditorMode(getEditorMode(currentTab));
+    }
+  }, [activeTab, tabs]);
+
+  const activeTabContent = tabs.find(tab => tab.id === activeTab)?.content || '';
+  const activeTabClassification = tabs.find(tab => tab.id === activeTab)?.classification;
+  const activeTabMode = activeTabClassification ? getEditorMode(tabs.find(tab => tab.id === activeTab)!) : 'javascript';
+
+  // Create a debounced classification function
+  const debouncedClassify = useCallback(
+    debounce(async (content: string, tabId: string) => {
+      try {
+        setIsClassifying(true);
+        setClassificationError(null);
+        
+        const currentTab = tabs.find(tab => tab.id === tabId);
+        if (!currentTab) return;
+
+        const classification = await classifyContent(content, getTabType(currentTab));
+        
+        // Update the tab with the new classification
+        const updatedTab: Tab = {
+          ...currentTab,
+          classification: {
+            type: classification.type as 'dataset' | 'prompt' | 'sheets',
+            format: classification.format as 'json' | 'csv' | 'yaml' | 'structured',
+            confidence: classification.confidence
+          }
+        };
+        
+        // Use onUpdateTab for classification updates
+        onUpdateTab(updatedTab);
+
+        // Update editor mode based on classification
+        if (classification.type === 'prompt') {
+          setEditorMode('markdown');
+        } else {
+          setEditorMode(getEditorMode(updatedTab));
+        }
+      } catch (error) {
+        console.error('Error classifying content:', error);
+        setClassificationError(error instanceof Error ? error.message : 'Failed to classify content');
+      } finally {
+        setIsClassifying(false);
+      }
+    }, 2000),
+    [tabs, onUpdateTab]
+  );
+
+  const handleEditorChange = useCallback((value: string | undefined) => {
+    if (!value || !activeTab) return;
+    
+    // Get the current tab for classification
+    const currentTab = tabs.find(tab => tab.id === activeTab);
+    if (!currentTab) return;
+
+    // Update the tab's content in the parent component
+    onTabContentChange(activeTab, value);
+
+    // Only classify if there's actual content
+    if (value.trim()) {
+      // Debounce the classification call
+      debouncedClassify(value, activeTab);
+    }
+  }, [activeTab, debouncedClassify, tabs, onTabContentChange]);
+
+  // Clean up the debounced function on unmount
+  useEffect(() => {
+    return () => {
+      debouncedClassify.cancel();
+    };
+  }, [debouncedClassify]);
 
   const classifyContent = async (content: string, type: string) => {
     if (!GEMINI_API_KEY) {
@@ -165,7 +220,7 @@ TA0002,Execution,Techniques that result in execution of adversary-controlled cod
       const prompt = `Analyze this ${type} content and classify it. Return ONLY a JSON object with these exact fields:
 {
   "type": "dataset" | "prompt" | "sheets" | "display",
-  "format": "json" | "text" | "markdown",
+  "format": "json" | "csv" | "yaml" | "structured",
   "confidence": number between 0 and 1
 }
 
@@ -227,221 +282,14 @@ ${content}`;
     }
   };
 
-  const debouncedClassify = useCallback(
-    debounce(async (content: string, tabId: string) => {
-      if (!content.trim()) return;
-      
-      setIsClassifying(true);
-      const classification = await classifyContent(content, getTabType(tabs.find(tab => tab.id === tabId)!));
-      setIsClassifying(false);
-      
-      // Only update the classification, not the content
-      setTabs(tabs => tabs.map(tab => 
-        tab.id === tabId 
-          ? { ...tab, classification }
-          : tab
-      ));
-    }, CLASSIFICATION_PAUSE_TIME),
-    []
-  );
-
-  const getTabType = (tab: Tab) => {
-    switch (tab.classification.type) {
-      case 'dataset':
-        return 'data-source';
-      case 'prompt':
-        return 'prompt-template';
-      case 'sheets':
-        return 'spreadsheet';
-      default:
-        return 'display';
-    }
-  };
-
-  const handleDragStart = (event: React.DragEvent, tab: Tab) => {
-    const nodeType = getTabType(tab);
-    event.dataTransfer.setData('text/plain', tab.id);
-    event.dataTransfer.setData('nodeId', nodeType);
-    event.dataTransfer.setData('tabName', tab.name);
-    event.dataTransfer.setData('tabContent', tab.content);
-    event.dataTransfer.setData('tabId', tab.id);
-    event.dataTransfer.setData('tabType', nodeType);
-    event.dataTransfer.effectAllowed = 'copy';
-  };
-
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'copy';
-  };
-
-  const onDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    
-    const tabId = e.dataTransfer.getData('text/plain');
-    const nodeId = e.dataTransfer.getData('nodeId');
-    const tabName = e.dataTransfer.getData('tabName');
-    const tabContent = e.dataTransfer.getData('tabContent');
-    
-    if (tabId && tabName && tabContent) {
-      onTabDrop(tabId, nodeId || null, tabName, tabContent, {
-        x: e.clientX,
-        y: e.clientY
-      });
-    }
-  };
-
-  const startEditing = (tabId: string, currentName: string) => {
-    setEditingTabId(tabId);
-    setEditingName(currentName);
-  };
-
-  const stopEditing = () => {
-    if (editingTabId && editingName.trim()) {
-      setTabs(tabs.map(tab => 
-        tab.id === editingTabId 
-          ? { ...tab, id: editingName.trim(), name: editingName.trim() }
-          : tab
-      ));
-    }
-    setEditingTabId(null);
-    setEditingName('');
-  };
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      stopEditing();
-    } else if (e.key === 'Escape') {
-      setEditingTabId(null);
-      setEditingName('');
-    }
-  };
-
-  const addNewTab = () => {
-    if (!newTabName.trim()) return;
-
-    const newTab: Tab = {
-      id: newTabName.trim(),
-      name: newTabName.trim(),
-      content: '',
-      type: 'data',
-      color: '#4CAF50',
-      classification: {
-        type: 'dataset',
-        format: 'json',
-        confidence: 0.8
-      }
-    };
-
-    setTabs([...tabs, newTab]);
-    setActiveTab(newTab.id);
-    setNewTabName('');
-  };
-
-  const handleNewTabKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter' && newTabName.trim()) {
-      addNewTab();
-    }
-  };
-
-  const handleEditorChange = useCallback((value: string | undefined) => {
-    if (!value) return;
-    
-    const now = Date.now();
-    const timeSinceLastChange = now - lastChangeTime.current;
-    lastChangeTime.current = now;
-
-    // Update the content immediately
-    setTabs(prevTabs => 
-      prevTabs.map(tab => 
-        tab.id === activeTab 
-          ? { ...tab, content: value }
-          : tab
-      )
-    );
-
-    // Notify parent about content change
-    onTabContentChange(activeTab, value);
-
-    // Clear any existing timeout
-    if (classificationTimeout.current) {
-      clearTimeout(classificationTimeout.current);
-    }
-
-    const currentTab = tabs.find(tab => tab.id === activeTab);
-    if (!currentTab) return;
-
-    // If enough time has passed since the last change, classify immediately
-    if (timeSinceLastChange >= CLASSIFICATION_PAUSE_TIME) {
-      classifyContent(value, getTabType(currentTab)).then(classification => {
-        setTabs(prevTabs => 
-          prevTabs.map(tab => 
-            tab.id === activeTab 
-              ? { ...tab, classification }
-              : tab
-          )
-        );
-      });
-    } else {
-      // Otherwise, set a timeout to classify after the pause
-      classificationTimeout.current = setTimeout(() => {
-        classifyContent(value, getTabType(currentTab)).then(classification => {
-          setTabs(prevTabs => 
-            prevTabs.map(tab => 
-              tab.id === activeTab 
-                ? { ...tab, classification }
-                : tab
-            )
-          );
-        });
-      }, CLASSIFICATION_PAUSE_TIME);
-    }
-  }, [activeTab, onTabContentChange, tabs]);
-
-  // Cleanup timeout on unmount
-  React.useEffect(() => {
-    return () => {
-      if (classificationTimeout.current) {
-        clearTimeout(classificationTimeout.current);
-      }
-    };
-  }, []);
-
-  const getEditorMode = (tab: Tab) => {
-    if (tab.classification?.type === 'dataset') {
-      switch (tab.classification.format) {
-        case 'json':
-          return 'json';
-        case 'csv':
-          return 'csv';
-        case 'yaml':
-          return 'yaml';
-        default:
-          return 'javascript';
-      }
-    }
-    return 'markdown'; // Default to markdown for prompts
-  };
-
-  // Update editor mode when active tab changes
-  useEffect(() => {
-    const currentTab = tabs.find(tab => tab.id === activeTab);
-    if (currentTab) {
-      setEditorMode(getEditorMode(currentTab));
-    }
-  }, [activeTab, tabs]);
-
-  const activeTabContent = tabs.find(tab => tab.id === activeTab)?.content || '';
-  const activeTabClassification = tabs.find(tab => tab.id === activeTab)?.classification;
-  const activeTabMode = activeTabClassification ? getEditorMode(tabs.find(tab => tab.id === activeTab)!) : 'javascript';
-
   const deleteTab = (tabId: string, e: React.MouseEvent) => {
     e.stopPropagation(); // Prevent tab selection when clicking delete
-    setTabs(tabs => tabs.filter(tab => tab.id !== tabId));
+    const remainingTabs = tabs.filter(tab => tab.id !== tabId);
     if (activeTab === tabId) {
-      const remainingTabs = tabs.filter(tab => tab.id !== tabId);
       setActiveTab(remainingTabs[0]?.id || '');
     }
+    // Call onDeleteTab to remove the tab from the parent's state
+    onDeleteTab(tabId);
   };
 
   const handleFontSizeChange = (delta: number) => {
@@ -452,74 +300,9 @@ ${content}`;
     setEditorMode(e.target.value);
   };
 
-  const createNewTab = () => {
-    const newTab: Tab = {
-      id: `tab-${Date.now()}`,
-      name: newTabName || 'New Tab',
-      content: '',
-      type: 'prompt',
-      color: '#4a90e2',
-      classification: {
-        type: 'prompt',
-        confidence: 0.8
-      }
-    };
-    setTabs((prevTabs) => [...prevTabs, newTab]);
-    setActiveTab(newTab.id);
-    setNewTabName('');
-  };
-
-  const handleTabDrop = (event: React.DragEvent<HTMLDivElement>) => {
-    event.preventDefault();
-    const tabId = event.dataTransfer.getData('text/plain');
-    const tab = tabs.find(t => t.id === tabId);
-    
-    if (tab) {
-      const rect = event.currentTarget.getBoundingClientRect();
-      const dropPosition = event.clientX - rect.left;
-      const newIndex = Math.floor((dropPosition / rect.width) * tabs.length);
-      
-      setTabs((prevTabs) => {
-        const newTabs = [...prevTabs];
-        const tabIndex = newTabs.findIndex(t => t.id === tabId);
-        newTabs.splice(tabIndex, 1);
-        newTabs.splice(newIndex, 0, {
-          ...tab,
-          classification: {
-            type: tab.classification.type,
-            format: tab.classification.format,
-            confidence: tab.classification.confidence
-          }
-        });
-        return newTabs;
-      });
-    }
-  };
-
-  const handleTabDragStart = (event: React.DragEvent<HTMLDivElement>, tabId: string) => {
-    event.dataTransfer.setData('text/plain', tabId);
-  };
-
-  const handleTabDragOver = (event: React.DragEvent<HTMLDivElement>) => {
-    event.preventDefault();
-  };
-
-  const handleTabClick = (tabId: string) => {
-    setActiveTab(tabId);
-  };
-
-  const handleTabClose = (event: React.MouseEvent, tabId: string) => {
-    event.stopPropagation();
-    setTabs((prevTabs) => {
-      const newTabs = prevTabs.filter(tab => tab.id !== tabId);
-      if (activeTab === tabId && newTabs.length > 0) {
-        setActiveTab(newTabs[0].id);
-      }
-      return newTabs;
-    });
-  };
-
   const getTabIcon = (tab: Tab) => {
+    if (!tab.classification) return '?';
+    
     switch (tab.classification.type) {
       case 'dataset':
         return tab.classification.format?.toUpperCase() || 'DS';
@@ -532,6 +315,60 @@ ${content}`;
     }
   };
 
+  const addNewTab = async () => {
+    if (!newTabName.trim()) return;
+
+    // Create a new tab with default prompt classification
+    const newTab: Tab = {
+      id: newTabName.trim(),
+      name: newTabName.trim(),
+      content: '',
+      type: 'prompt',
+      color: '#4CAF50',
+      classification: {
+        type: 'prompt',
+        format: 'structured',
+        confidence: 0.8
+      }
+    };
+
+    // Add the tab
+    onAddTab(newTab);
+    setActiveTab(newTab.id);
+    setNewTabName('');
+  };
+
+  const handleNewTabKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' && newTabName.trim()) {
+      addNewTab();
+    }
+  };
+
+  const handleTabClose = (event: React.MouseEvent, tabId: string) => {
+    event.stopPropagation();
+    onDeleteTab(tabId);
+    if (activeTab === tabId) {
+      const remainingTabs = tabs.filter(tab => tab.id !== tabId);
+      setActiveTab(remainingTabs[0]?.id || '');
+    }
+  };
+
+  const startEditing = (tabId: string, tabName: string) => {
+    setEditingTabId(tabId);
+    setEditingName(tabName);
+  };
+
+  const stopEditing = () => {
+    setEditingTabId(null);
+    setEditingName('');
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      stopEditing();
+    }
+  };
+
   return (
     <div 
       style={{ 
@@ -541,12 +378,11 @@ ${content}`;
         width: '100%'
       }}
       onDragOver={handleDragOver}
-      onDrop={onDrop}
     >
       <div style={{ 
         padding: '10px',
         borderBottom: '1px solid #e0e0e0',
-        display: 'flex',
+        display: 'flex', 
         gap: '8px',
         flexWrap: 'wrap'
       }}>
@@ -817,7 +653,6 @@ ${content}`;
             suggestOnTriggerCharacters: true,
             quickSuggestions: true,
             parameterHints: { enabled: true },
-            // Add these options to improve stability
             bracketPairColorization: { enabled: true },
             guides: { bracketPairs: true },
             scrollbar: {

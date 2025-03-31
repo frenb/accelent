@@ -28,7 +28,13 @@ interface Tab {
   id: string;
   name: string;
   content: string;
-  type: string;
+  type: 'data' | 'prompt' | 'sheets';
+  color: string;
+  classification: {
+    type: 'dataset' | 'prompt' | 'sheets';
+    format?: 'json' | 'csv' | 'yaml' | 'structured';
+    confidence: number;
+  };
 }
 
 // Initial nodes
@@ -37,12 +43,61 @@ const initialNodes: Node[] = [];
 // Initial edges
 const initialEdges: Edge[] = [];
 
+// Initial tabs
+const initialTabs: Tab[] = [
+  {
+    id: 'Dataset 1',
+    name: 'Dataset 1',
+    content: `{
+  "tactics": [
+    {
+      "id": "TA0001",
+      "name": "Initial Access",
+      "description": "Techniques used to gain initial access to a network"
+    },
+    {
+      "id": "TA0002",
+      "name": "Execution",
+      "description": "Techniques that result in execution of adversary-controlled code"
+    }
+  ]
+}`,
+    type: 'data',
+    color: '#4CAF50',
+    classification: {
+      type: 'dataset',
+      format: 'json',
+      confidence: 0.8
+    }
+  },
+  {
+    id: 'Prompt 1',
+    name: 'Prompt 1',
+    content: `Create a list of top 10 MITRE tactics, format as JSON with the following structure:
+{
+  "tactics": [
+    {
+      "id": "TA0001",
+      "name": "Tactic Name",
+      "description": "Tactic Description"
+    }
+  ]
+}`,
+    type: 'prompt',
+    color: '#4a90e2',
+    classification: {
+      type: 'prompt',
+      confidence: 0.8
+    }
+  }
+];
+
 function PipelineEditorContent() {
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
   const [selectedNode, setSelectedNode] = useState<string | null>(null);
   const [editorWidth, setEditorWidth] = useState(window.innerWidth / 2);
-  const [tabs, setTabs] = useState<Tab[]>([]);
+  const [tabs, setTabs] = useState<Tab[]>(initialTabs);
   const { screenToFlowPosition, getNodes } = useReactFlow();
   const isDragging = useRef(false);
   const startX = useRef(0);
@@ -316,13 +371,21 @@ function PipelineEditorContent() {
     );
   }, [setNodes]);
 
-  const handleTabAdd = useCallback((name: string, content: string) => {
+  const handleTabAdd = useCallback((name: string, content: string, type: string) => {
+    console.log('handleTabAdd called with:', { name, content, type });
+    
     // Create a new tab with the given name, content, and type
-    const newTab = {
+    const newTab: Tab = {
       id: `tab-${Date.now()}`,
-      name,
-      content,
-      type: 'output'  // Default type for output tabs
+      name: name || 'New Output',
+      content: content || '',  // Ensure content is not undefined
+      type: type === 'output' ? 'data' : (type as 'data' | 'prompt' | 'sheets'),
+      color: '#9C27B0',  // Purple color for output tabs
+      classification: {
+        type: type === 'output' ? 'dataset' : (type as 'dataset' | 'prompt' | 'sheets'),
+        format: 'json',
+        confidence: 0.8
+      }
     };
     
     // Add the new tab to the tabs state
@@ -330,6 +393,25 @@ function PipelineEditorContent() {
     
     // Log the tab creation for debugging
     console.log('Adding tab:', newTab);
+  }, [setTabs]);
+
+  const handleAddTab = useCallback((newTab: Tab) => {
+    console.log('handleAddTab called with:', newTab);
+    setTabs(prevTabs => [...prevTabs, newTab]);
+  }, [setTabs]);
+
+  const handleUpdateTab = useCallback((tab: Tab) => {
+    console.log('Updating tab:', tab);
+    setTabs(prevTabs =>
+      prevTabs.map((t) =>
+        t.id === tab.id ? tab : t
+      )
+    );
+  }, [setTabs]);
+
+  const handleDeleteTab = useCallback((tabId: string) => {
+    console.log('Deleting tab:', tabId);
+    setTabs(prevTabs => prevTabs.filter(tab => tab.id !== tabId));
   }, [setTabs]);
 
   // Define node types
@@ -349,6 +431,10 @@ function PipelineEditorContent() {
           onTabDrop={handleTabDrop}
           onTabContentChange={handleTabContentChange}
           onAddOutputTab={handleTabAdd}
+          onAddTab={handleAddTab}
+          onUpdateTab={handleUpdateTab}
+          onDeleteTab={handleDeleteTab}
+          tabs={tabs}
         />
       </div>
       <div
