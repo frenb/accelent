@@ -55,7 +55,7 @@ For the tabbed text editor, I want to use Ace the editor with the appropriate sy
 ## Prompt nodes. 
 * Prompt nodes should have the properties in this example: {label, prompt, input, output, tabId} 
 * users can drag and drop a prompt tab to the node canvas to create a new prompt node 
-* For prompt node linked to a prompt Prompt tab, the prompt tab content should be automatically executed as a prompt using our gemini integration. 
+* For prompt node linked to a Prompt tab, the prompt tab content should be automatically executed as a prompt using our gemini integration. 
 * if the output is to large to fit within 100px, then turn that view into a scrollable view
 * If the prompt node is the target node to which a source node connects, then display the a view in the prompt node marked input 
 * Whenever the related prompt tab is updated and after 1 second pause, gemini model should be called again. If the prompt says only output JSON, make sure we're only outputting JSON. 

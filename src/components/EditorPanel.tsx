@@ -258,12 +258,13 @@ ${content}`;
   };
 
   const handleDragStart = (event: React.DragEvent, tab: Tab) => {
-    const nodeId = getTabType(tab);
+    const nodeType = getTabType(tab);
     event.dataTransfer.setData('text/plain', tab.id);
-    event.dataTransfer.setData('nodeId', nodeId);
+    event.dataTransfer.setData('nodeId', nodeType);
     event.dataTransfer.setData('tabName', tab.name);
     event.dataTransfer.setData('tabContent', tab.content);
     event.dataTransfer.setData('tabId', tab.id);
+    event.dataTransfer.setData('tabType', nodeType);
     event.dataTransfer.effectAllowed = 'copy';
   };
 

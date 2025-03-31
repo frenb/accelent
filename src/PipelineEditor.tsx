@@ -114,7 +114,7 @@ function PipelineEditorContent() {
   }, [nodes]);
 
   // Handle adding new nodes
-  const handleAddNode = useCallback((type: NodeType, position?: { x: number; y: number }, tabData?: { name: string, content: string }) => {
+  const handleAddNode = useCallback((type: NodeType, position?: { x: number; y: number }, tabData?: { name: string, content: string, type?: string }) => {
     const nodePosition = position || screenToFlowPosition({
       x: window.innerWidth / 2,
       y: window.innerHeight / 2,
@@ -128,7 +128,7 @@ function PipelineEditorContent() {
           type: 'dataSource',
           position: nodePosition,
           data: {
-            label: tabData ? createUniqueNodeName(tabData.name) : createUniqueNodeName('New Data Source'),
+            label: tabData ? `${createUniqueNodeName(tabData.name)} (${tabData.type || 'Data Source'})` : createUniqueNodeName('New Data Source'),
             sourceType: tabData?.content.includes('{') ? 'JSON' : 'CSV',
             content: tabData?.content || '',
           },
@@ -140,7 +140,7 @@ function PipelineEditorContent() {
           type: 'promptTemplate',
           position: nodePosition,
           data: {
-            label: tabData ? createUniqueNodeName(tabData.name) : createUniqueNodeName('New Prompt Template'),
+            label: tabData ? `${createUniqueNodeName(tabData.name)} (${tabData.type || 'Prompt'})` : createUniqueNodeName('New Prompt Template'),
             prompt: tabData?.content || '',
             content: tabData?.content || '',
           },
@@ -152,7 +152,7 @@ function PipelineEditorContent() {
           type: 'spreadsheet',
           position: nodePosition,
           data: {
-            label: tabData ? createUniqueNodeName(tabData.name) : createUniqueNodeName('New Spreadsheet'),
+            label: tabData ? `${createUniqueNodeName(tabData.name)} (${tabData.type || 'Spreadsheet'})` : createUniqueNodeName('New Spreadsheet'),
             sourceType: 'sheets',
             content: tabData?.content || '',
           },
@@ -164,7 +164,7 @@ function PipelineEditorContent() {
           type: 'display',
           position: nodePosition,
           data: {
-            label: tabData ? createUniqueNodeName(tabData.name) : createUniqueNodeName('New Display'),
+            label: tabData ? `${createUniqueNodeName(tabData.name)} (${tabData.type || 'Display'})` : createUniqueNodeName('New Display'),
             displayType: 'text',
             content: tabData?.content || '',
           },
@@ -347,6 +347,7 @@ function PipelineEditorContent() {
             const nodeId = event.dataTransfer.getData('nodeId');
             const tabName = event.dataTransfer.getData('tabName');
             const tabContent = event.dataTransfer.getData('tabContent');
+            const tabType = event.dataTransfer.getData('tabType');
             
             if (tabId && tabName && tabContent) {
               const position = screenToFlowPosition({
@@ -354,19 +355,35 @@ function PipelineEditorContent() {
                 y: event.clientY
               });
               
-              // Determine node type based on content
+              // Determine node type based on tab type
               let nodeType = NodeType.DATA_SOURCE;
-              if (tabContent.includes('{')) {
-                nodeType = NodeType.DATA_SOURCE;
-              } else if (tabContent.includes('prompt')) {
-                nodeType = NodeType.PROMPT_TEMPLATE;
-              } else if (tabContent.includes('sheet')) {
-                nodeType = NodeType.SPREADSHEET;
-              } else if (tabContent.includes('display')) {
-                nodeType = NodeType.DISPLAY;
+              switch (tabType) {
+                case 'data-source':
+                  nodeType = NodeType.DATA_SOURCE;
+                  break;
+                case 'prompt-template':
+                  nodeType = NodeType.PROMPT_TEMPLATE;
+                  break;
+                case 'spreadsheet':
+                  nodeType = NodeType.SPREADSHEET;
+                  break;
+                case 'display':
+                  nodeType = NodeType.DISPLAY;
+                  break;
+                default:
+                  // Fallback to content-based determination
+                  if (tabContent.includes('{')) {
+                    nodeType = NodeType.DATA_SOURCE;
+                  } else if (tabContent.includes('prompt')) {
+                    nodeType = NodeType.PROMPT_TEMPLATE;
+                  } else if (tabContent.includes('sheet')) {
+                    nodeType = NodeType.SPREADSHEET;
+                  } else if (tabContent.includes('display')) {
+                    nodeType = NodeType.DISPLAY;
+                  }
               }
 
-              handleAddNode(nodeType, position, { name: tabName, content: tabContent });
+              handleAddNode(nodeType, position, { name: tabName, content: tabContent, type: tabType });
             }
           }}
         >
