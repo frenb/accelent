@@ -53,12 +53,15 @@ For the tabbed text editor, I want to use Ace the editor with the appropriate sy
 
 # making the diagram functional
 ## Prompt nodes. 
-* Prompt nodes should have the properties in this example: {label, prompt, input, output, tabId} 
 * users can drag and drop a prompt tab to the node canvas to create a new prompt node 
+* Prompt nodes should have the properties in this example: {label, prompt, input, output, tabId} 
+* there should be view for the prompt under title "PROMPT", and the generated output from the prompt in a text view under title "GENERATED OUTPUT"
+* on first drag and drop, we use the prompt to generate a response with our gemini integration
+* Whenever the related prompt tab is updated and after 1 second pause, gemini model should be called again. If the prompt says only output JSON, make sure we're only outputting JSON. 
 * For prompt node linked to a Prompt tab, the prompt tab content should be automatically executed as a prompt using our gemini integration. 
 * if the output is to large to fit within 100px, then turn that view into a scrollable view
 * If the prompt node is the target node to which a source node connects, then display the a view in the prompt node marked input 
-* Whenever the related prompt tab is updated and after 1 second pause, gemini model should be called again. If the prompt says only output JSON, make sure we're only outputting JSON. 
+
 * Double-clicking on the output field creates a tab of type "Output" with the name matching the label + "Output"
 * if there is an existing output tab with the same name,  then create new tabs with the label + "Output" plus a number, like Prompt1 Output 1, Prompt1 Output 2, and so on 
 * like all the other node types, the prompt type should have a delete button

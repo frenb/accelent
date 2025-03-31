@@ -16,6 +16,7 @@ import ReactFlow, {
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { DataSourceNode } from './components/nodes/DataSourceNode';
+import { PromptTemplateNode } from './components/nodes/PromptTemplateNode';
 import { Toolbar } from './components/Toolbar';
 import { EditorPanel } from './components/EditorPanel';
 import { NodeType } from './types/Pipeline';
@@ -23,6 +24,7 @@ import { NodeType } from './types/Pipeline';
 // Define node types
 const nodeTypes: NodeTypes = {
   dataSource: DataSourceNode,
+  promptTemplate: PromptTemplateNode,
 };
 
 // Initial nodes
@@ -114,7 +116,7 @@ function PipelineEditorContent() {
   }, [nodes]);
 
   // Handle adding new nodes
-  const handleAddNode = useCallback((type: NodeType, position?: { x: number; y: number }, tabData?: { name: string, content: string, type?: string }) => {
+  const handleAddNode = useCallback((type: NodeType, position?: { x: number; y: number }, tabData?: { name: string, content: string, type?: string, tabId?: string }) => {
     const nodePosition = position || screenToFlowPosition({
       x: window.innerWidth / 2,
       y: window.innerHeight / 2,
@@ -142,7 +144,9 @@ function PipelineEditorContent() {
           data: {
             label: tabData ? `${createUniqueNodeName(tabData.name)} (${tabData.type || 'Prompt'})` : createUniqueNodeName('New Prompt Template'),
             prompt: tabData?.content || '',
-            content: tabData?.content || '',
+            input: '',
+            output: '',
+            tabId: tabData?.tabId || '',
           },
         };
         break;
@@ -290,8 +294,22 @@ function PipelineEditorContent() {
   // Handle tab content change
   const handleTabContentChange = useCallback((tabId: string, content: string) => {
     console.error('Tab content changed:', { tabId, content });
-    // Handle tab content changes if needed
-  }, []);
+    
+    // Update any nodes associated with this tab
+    setNodes((nds) =>
+      nds.map((node) =>
+        node.data.tabId === tabId
+          ? {
+              ...node,
+              data: {
+                ...node.data,
+                prompt: content,
+              },
+            }
+          : node
+      )
+    );
+  }, [setNodes]);
 
   return (
     <div style={{ width: '100vw', height: '100vh', display: 'flex' }}>
@@ -383,7 +401,12 @@ function PipelineEditorContent() {
                   }
               }
 
-              handleAddNode(nodeType, position, { name: tabName, content: tabContent, type: tabType });
+              handleAddNode(nodeType, position, { 
+                name: tabName, 
+                content: tabContent, 
+                type: tabType,
+                tabId: tabId 
+              });
             }
           }}
         >
