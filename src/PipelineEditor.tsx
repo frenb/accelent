@@ -26,20 +26,7 @@ const nodeTypes: NodeTypes = {
 };
 
 // Initial nodes
-const initialNodes: Node[] = [
-  {
-    id: '1',
-    type: 'dataSource',
-    position: { x: 250, y: 100 },
-    data: { label: 'Data Source 1', sourceType: 'CSV' },
-  },
-  {
-    id: '2',
-    type: 'dataSource',
-    position: { x: 250, y: 300 },
-    data: { label: 'Data Source 2', sourceType: 'JSON' },
-  },
-];
+const initialNodes: Node[] = [];
 
 // Initial edges
 const initialEdges: Edge[] = [];
@@ -49,7 +36,7 @@ function PipelineEditorContent() {
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
   const [selectedNode, setSelectedNode] = useState<string | null>(null);
   const [editorWidth, setEditorWidth] = useState(window.innerWidth / 2);
-  const { screenToFlowPosition } = useReactFlow();
+  const { screenToFlowPosition, getNodes } = useReactFlow();
   const isDragging = useRef(false);
   const startX = useRef(0);
   const startWidth = useRef(0);
@@ -93,9 +80,42 @@ function PipelineEditorContent() {
     []
   );
 
+  // Find the closest node to a given position
+  const findClosestNode = useCallback((position: { x: number; y: number }): Node | null => {
+    const nodes = getNodes();
+    let closestNode: Node | null = null;
+    let minDistance = Infinity;
+
+    nodes.forEach((node) => {
+      const dx = node.position.x - position.x;
+      const dy = node.position.y - position.y;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+      if (distance < minDistance) {
+        minDistance = distance;
+        closestNode = node;
+      }
+    });
+
+    return closestNode;
+  }, [getNodes]);
+
+  // Create a new node with a unique name
+  const createUniqueNodeName = useCallback((baseName: string) => {
+    const existingNames = nodes.map(node => node.data.label);
+    let newName = baseName;
+    let counter = 1;
+
+    while (existingNames.includes(newName)) {
+      newName = `${baseName} (Copy ${counter})`;
+      counter++;
+    }
+
+    return newName;
+  }, [nodes]);
+
   // Handle adding new nodes
-  const handleAddNode = useCallback((type: NodeType) => {
-    const position = screenToFlowPosition({
+  const handleAddNode = useCallback((type: NodeType, position?: { x: number; y: number }) => {
+    const nodePosition = position || screenToFlowPosition({
       x: window.innerWidth / 2,
       y: window.innerHeight / 2,
     });
@@ -106,9 +126,9 @@ function PipelineEditorContent() {
         newNode = {
           id: `node-${Date.now()}`,
           type: 'dataSource',
-          position,
+          position: nodePosition,
           data: {
-            label: 'New Data Source',
+            label: createUniqueNodeName('New Data Source'),
             sourceType: 'CSV',
           },
         };
@@ -117,9 +137,9 @@ function PipelineEditorContent() {
         newNode = {
           id: `node-${Date.now()}`,
           type: 'promptTemplate',
-          position,
+          position: nodePosition,
           data: {
-            label: 'New Prompt Template',
+            label: createUniqueNodeName('New Prompt Template'),
             prompt: '',
           },
         };
@@ -128,9 +148,9 @@ function PipelineEditorContent() {
         newNode = {
           id: `node-${Date.now()}`,
           type: 'spreadsheet',
-          position,
+          position: nodePosition,
           data: {
-            label: 'New Spreadsheet',
+            label: createUniqueNodeName('New Spreadsheet'),
             sourceType: 'sheets',
           },
         };
@@ -139,9 +159,9 @@ function PipelineEditorContent() {
         newNode = {
           id: `node-${Date.now()}`,
           type: 'display',
-          position,
+          position: nodePosition,
           data: {
-            label: 'New Display',
+            label: createUniqueNodeName('New Display'),
             displayType: 'text',
           },
         };
@@ -152,7 +172,20 @@ function PipelineEditorContent() {
 
     console.error('Adding new node:', newNode);
     setNodes((nds) => [...nds, newNode]);
-  }, [screenToFlowPosition, setNodes]);
+
+    // Find and connect to closest node
+    const closestNode = findClosestNode(nodePosition);
+    if (closestNode) {
+      const isAbove = nodePosition.y < closestNode.position.y;
+      const newEdge = {
+        id: `edge-${Date.now()}`,
+        source: isAbove ? newNode.id : closestNode.id,
+        target: isAbove ? closestNode.id : newNode.id,
+        type: 'smoothstep',
+      };
+      setEdges((eds) => [...eds, newEdge]);
+    }
+  }, [screenToFlowPosition, setNodes, setEdges, findClosestNode, createUniqueNodeName]);
 
   // Handle keyboard events for node deletion
   const handleRemoveNode = useCallback((nodeId: string) => {
@@ -206,24 +239,49 @@ function PipelineEditorContent() {
   }, []);
 
   // Handle tab drop
-  const handleTabDrop = useCallback((tabId: string, nodeId: string, tabName: string, content: string) => {
-    console.error('Tab dropped:', { tabId, nodeId, tabName, content });
-    // Update node data with the dropped tab content
-    setNodes((nds) =>
-      nds.map((node) =>
-        node.id === nodeId
-          ? {
-              ...node,
-              data: {
-                ...node.data,
-                label: tabName,
-                sourceType: content.includes('{') ? 'JSON' : 'CSV',
-              },
-            }
-          : node
-      )
-    );
-  }, [setNodes]);
+  const handleTabDrop = useCallback((tabId: string, nodeId: string | null, tabName: string, content: string, dropPosition?: { x: number, y: number }) => {
+    console.error('Tab dropped:', { tabId, nodeId, tabName, content, dropPosition });
+    
+    if (nodeId) {
+      // Update existing node
+      setNodes((nds) =>
+        nds.map((node) =>
+          node.id === nodeId
+            ? {
+                ...node,
+                data: {
+                  ...node.data,
+                  label: tabName,
+                  sourceType: content.includes('{') ? 'JSON' : 'CSV',
+                },
+              }
+            : node
+        )
+      );
+    } else {
+      // Create new node at drop position
+      const position = dropPosition 
+        ? screenToFlowPosition(dropPosition)
+        : screenToFlowPosition({
+            x: window.innerWidth / 2,
+            y: window.innerHeight / 2,
+          });
+      
+      // Determine node type based on content
+      let nodeType = NodeType.DATA_SOURCE;
+      if (content.includes('{')) {
+        nodeType = NodeType.DATA_SOURCE;
+      } else if (content.includes('prompt')) {
+        nodeType = NodeType.PROMPT_TEMPLATE;
+      } else if (content.includes('sheet')) {
+        nodeType = NodeType.SPREADSHEET;
+      } else if (content.includes('display')) {
+        nodeType = NodeType.DISPLAY;
+      }
+
+      handleAddNode(nodeType, position);
+    }
+  }, [setNodes, screenToFlowPosition, handleAddNode]);
 
   // Handle tab content change
   const handleTabContentChange = useCallback((tabId: string, content: string) => {
@@ -275,6 +333,38 @@ function PipelineEditorContent() {
           nodesConnectable={true}
           elementsSelectable={true}
           fitView
+          onDragOver={(event) => {
+            event.preventDefault();
+            event.dataTransfer.dropEffect = 'copy';
+          }}
+          onDrop={(event) => {
+            event.preventDefault();
+            const tabId = event.dataTransfer.getData('text/plain');
+            const nodeId = event.dataTransfer.getData('nodeId');
+            const tabName = event.dataTransfer.getData('tabName');
+            const tabContent = event.dataTransfer.getData('tabContent');
+            
+            if (tabId && tabName && tabContent) {
+              const position = screenToFlowPosition({
+                x: event.clientX,
+                y: event.clientY
+              });
+              
+              // Determine node type based on content
+              let nodeType = NodeType.DATA_SOURCE;
+              if (tabContent.includes('{')) {
+                nodeType = NodeType.DATA_SOURCE;
+              } else if (tabContent.includes('prompt')) {
+                nodeType = NodeType.PROMPT_TEMPLATE;
+              } else if (tabContent.includes('sheet')) {
+                nodeType = NodeType.SPREADSHEET;
+              } else if (tabContent.includes('display')) {
+                nodeType = NodeType.DISPLAY;
+              }
+
+              handleAddNode(nodeType, position);
+            }
+          }}
         >
           <Background />
           <Controls />

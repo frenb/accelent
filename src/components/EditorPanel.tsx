@@ -16,7 +16,7 @@ interface Tab {
 }
 
 interface EditorPanelProps {
-  onTabDrop: (tabId: string, nodeId: string, tabName: string, content: string) => void;
+  onTabDrop: (tabId: string, nodeId: string | null, tabName: string, content: string, dropPosition?: { x: number, y: number }) => void;
   onTabContentChange: (tabId: string, content: string) => void;
 }
 
@@ -281,8 +281,11 @@ ${content}`;
     const tabName = e.dataTransfer.getData('tabName');
     const tabContent = e.dataTransfer.getData('tabContent');
     
-    if (tabId && nodeId && tabName && tabContent) {
-      onTabDrop(tabId, nodeId, tabName, tabContent);
+    if (tabId && tabName && tabContent) {
+      onTabDrop(tabId, nodeId || null, tabName, tabContent, {
+        x: e.clientX,
+        y: e.clientY
+      });
     }
   };
 
