@@ -322,7 +322,7 @@ ${content}`;
     const newTab: Tab = {
       id: newTabName.trim(),
       name: newTabName.trim(),
-      content: '',
+      content: '',  // Start with empty content
       type: 'prompt',
       color: '#4CAF50',
       classification: {
@@ -603,12 +603,11 @@ ${content}`;
             position: 'absolute',
             top: '10px',
             right: '10px',
-            background: '#f0f0f0',
-            padding: '4px 8px',
+            background: 'rgba(0, 0, 0, 0.7)',
+            color: 'white',
+            padding: '5px 10px',
             borderRadius: '4px',
-            fontSize: '12px',
-            color: '#666',
-            fontFamily: '"Open Sans", sans-serif'
+            fontSize: '12px'
           }}>
             Classifying content...
           </div>
@@ -618,17 +617,12 @@ ${content}`;
             position: 'absolute',
             top: '10px',
             right: '10px',
-            background: '#ffebee',
-            padding: '8px 12px',
+            background: 'rgba(255, 0, 0, 0.7)',
+            color: 'white',
+            padding: '5px 10px',
             borderRadius: '4px',
-            fontSize: '12px',
-            color: '#c62828',
-            maxWidth: '300px',
-            whiteSpace: 'pre-wrap',
-            boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-            fontFamily: '"Open Sans", sans-serif'
+            fontSize: '12px'
           }}>
-            <div style={{ fontWeight: 600, marginBottom: '4px' }}>Classification Error:</div>
             {classificationError}
           </div>
         )}
@@ -642,23 +636,8 @@ ${content}`;
           options={{
             fontSize,
             minimap: { enabled: false },
-            scrollBeyondLastLine: false,
+            scrollBeyond: false,
             automaticLayout: true,
-            wordWrap: 'on',
-            lineNumbers: 'on',
-            tabSize: 2,
-            insertSpaces: true,
-            renderWhitespace: 'selection',
-            fontFamily: '"Open Sans", monospace',
-            suggestOnTriggerCharacters: true,
-            quickSuggestions: true,
-            parameterHints: { enabled: true },
-            bracketPairColorization: { enabled: true },
-            guides: { bracketPairs: true },
-            scrollbar: {
-              vertical: 'visible',
-              horizontal: 'visible'
-            }
           }}
         />
       </div>

@@ -335,25 +335,50 @@ function PipelineEditorContent() {
             y: window.innerHeight / 2,
           });
       
-      // Determine node type based on content
-      let nodeType = NodeType.DATA_SOURCE;
-      if (content.includes('{')) {
-        nodeType = NodeType.DATA_SOURCE;
-      } else if (content.includes('prompt')) {
-        nodeType = NodeType.PROMPT_TEMPLATE;
-      } else if (content.includes('sheet')) {
-        nodeType = NodeType.SPREADSHEET;
-      } else if (content.includes('display')) {
-        nodeType = NodeType.DISPLAY;
+      // Find the tab to get its classification
+      const tab = tabs.find(t => t.id === tabId);
+      if (!tab) {
+        console.error('Tab not found:', tabId);
+        return;
       }
 
-      handleAddNode(nodeType, position, { name: tabName, content: content });
+      // Determine node type based on tab classification
+      let nodeType: NodeType;
+      switch (tab.classification.type) {
+        case 'dataset':
+          nodeType = NodeType.DATA_SOURCE;
+          break;
+        case 'prompt':
+          nodeType = NodeType.PROMPT_TEMPLATE;
+          break;
+        case 'sheets':
+          nodeType = NodeType.SPREADSHEET;
+          break;
+        default:
+          nodeType = NodeType.DATA_SOURCE;
+      }
+
+      handleAddNode(nodeType, position, { 
+        name: tabName, 
+        content: content,
+        type: tab.classification.type,
+        tabId: tabId
+      });
     }
-  }, [setNodes, screenToFlowPosition, handleAddNode]);
+  }, [setNodes, screenToFlowPosition, handleAddNode, tabs]);
 
   // Handle tab content change
   const handleTabContentChange = useCallback((tabId: string, content: string) => {
     console.error('Tab content changed:', { tabId, content });
+    
+    // Update the tab content
+    setTabs(prevTabs =>
+      prevTabs.map(tab =>
+        tab.id === tabId
+          ? { ...tab, content }
+          : tab
+      )
+    );
     
     // Update any nodes associated with this tab
     setNodes((nds) =>
@@ -364,12 +389,13 @@ function PipelineEditorContent() {
               data: {
                 ...node.data,
                 prompt: content,
+                content: content,
               },
             }
           : node
       )
     );
-  }, [setNodes]);
+  }, [setNodes, setTabs]);
 
   const handleTabAdd = useCallback((name: string, content: string, type: string) => {
     console.log('handleTabAdd called with:', { name, content, type });
@@ -383,7 +409,9 @@ function PipelineEditorContent() {
       color: '#9C27B0',  // Purple color for output tabs
       classification: {
         type: type === 'output' ? 'dataset' : (type as 'dataset' | 'prompt' | 'sheets'),
-        format: 'json',
+        format: type === 'prompt' ? 'structured' : 
+               type === 'sheets' ? 'csv' : 
+               content.includes('{') ? 'json' : 'csv',
         confidence: 0.8
       }
     };
