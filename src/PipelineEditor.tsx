@@ -24,6 +24,13 @@ import { Toolbar } from './components/Toolbar';
 import { EditorPanel } from './components/EditorPanel';
 import { NodeType, NodeData } from './types/Pipeline';
 
+interface Tab {
+  id: string;
+  name: string;
+  content: string;
+  type: string;
+}
+
 // Initial nodes
 const initialNodes: Node[] = [];
 
@@ -35,6 +42,7 @@ function PipelineEditorContent() {
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
   const [selectedNode, setSelectedNode] = useState<string | null>(null);
   const [editorWidth, setEditorWidth] = useState(window.innerWidth / 2);
+  const [tabs, setTabs] = useState<Tab[]>([]);
   const { screenToFlowPosition, getNodes } = useReactFlow();
   const isDragging = useRef(false);
   const startX = useRef(0);
@@ -46,7 +54,7 @@ function PipelineEditorContent() {
   // Handle node changes (including selection)
   const handleNodeChanges = useCallback(
     (changes: NodeChange[]) => {
-      console.error('Node changes:', changes);
+      //console.error('Node changes:', changes);
       onNodesChange(changes);
     },
     [onNodesChange]
@@ -309,9 +317,20 @@ function PipelineEditorContent() {
   }, [setNodes]);
 
   const handleTabAdd = useCallback((name: string, content: string, type: string) => {
-    // TODO: Implement tab adding logic
-    console.log('Adding tab:', { name, content, type });
-  }, []);
+    // Create a new tab with the given name, content, and type
+    const newTab = {
+      id: `tab-${Date.now()}`,
+      name,
+      content,
+      type
+    };
+    
+    // Add the new tab to the tabs state
+    setTabs(prevTabs => [...prevTabs, newTab]);
+    
+    // Log the tab creation for debugging
+    console.log('Adding tab:', newTab);
+  }, [setTabs]);
 
   // Define node types
   const nodeTypes = useMemo(() => ({

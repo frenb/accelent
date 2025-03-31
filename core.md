@@ -32,6 +32,9 @@ When nodes are added to the graph by clicking a node type on the node palette we
 # Delete nodes
 User can delete a node by clicking on it and then clicking the delete key on the keyboard. When a node is selected, its border should change to a bright green color. 
 
+# delete connectors
+Users can left-click on a connector to delete that connector 
+
 # Shift select nodes to move them
 Users are able to select groups of nodes by holding shift and clicking the left mouse button. Once 2 or mode nodes are selected, the user can move that group of nodes together 
 
