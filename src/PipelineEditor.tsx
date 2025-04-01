@@ -128,9 +128,49 @@ function PipelineEditorContent() {
   const handleConnect = useCallback(
     (connection: Connection) => {
       console.error('New connection:', connection);
+      
+      // Get the source and target nodes
+      const sourceNode = nodes.find(n => n.id === connection.source);
+      const targetNode = nodes.find(n => n.id === connection.target);
+      
+      console.error('Connection nodes:', {
+        source: sourceNode ? {
+          id: sourceNode.id,
+          type: sourceNode.type,
+          output: sourceNode.data.output
+        } : null,
+        target: targetNode ? {
+          id: targetNode.id,
+          type: targetNode.type,
+          input: targetNode.data.input
+        } : null
+      });
+      
+      if (sourceNode && targetNode) {
+        // Update the target node with the source node's output
+        setNodes((nds) =>
+          nds.map((node) =>
+            node.id === targetNode.id
+              ? {
+                  ...node,
+                  data: {
+                    ...node.data,
+                    input: sourceNode.data.output || '',
+                  },
+                }
+              : node
+          )
+        );
+        
+        console.error('Updated target node with input:', {
+          targetId: targetNode.id,
+          newInput: sourceNode.data.output || ''
+        });
+      }
+      
       setEdges((eds) => addEdge(connection, eds));
     },
-    [setEdges]
+    [setNodes, setEdges, nodes]
   );
 
   // Handle node selection
@@ -219,6 +259,9 @@ function PipelineEditorContent() {
             label: tabData ? `${createUniqueNodeName(tabData.name)} (${tabData.type || 'Spreadsheet'})` : createUniqueNodeName('New Spreadsheet'),
             sourceType: 'sheets',
             content: tabData?.content || '',
+            input: '',  // Initialize empty input
+            output: '', // Initialize empty output
+            tabId: tabData?.tabId || '',
           },
         };
         break;
@@ -251,6 +294,28 @@ function PipelineEditorContent() {
         target: isAbove ? closestNode.id : newNode.id,
         type: 'smoothstep',
       };
+
+      // If this is a spreadsheet node and we're connecting to a source node,
+      // copy the source node's output to the spreadsheet node's input
+      if (type === NodeType.SPREADSHEET && closestNode.data.output) {
+        const sourceNode = isAbove ? closestNode : newNode;
+        const targetNode = isAbove ? newNode : closestNode;
+        
+        setNodes((nds) =>
+          nds.map((node) =>
+            node.id === targetNode.id
+              ? {
+                  ...node,
+                  data: {
+                    ...node.data,
+                    input: sourceNode.data.output || '',
+                  },
+                }
+              : node
+          )
+        );
+      }
+
       setEdges((eds) => [...eds, newEdge]);
     }
   }, [screenToFlowPosition, setNodes, setEdges, findClosestNode, createUniqueNodeName]);
@@ -449,6 +514,9 @@ function PipelineEditorContent() {
     ),
     promptTemplate: (props: NodeProps<NodeData>) => (
       <PromptTemplateNode {...props} onDelete={handleRemoveNode} onTabAdd={handleTabAdd} />
+    ),
+    spreadsheet: (props: NodeProps<NodeData>) => (
+      <SpreadsheetNode {...props} onRemove={handleRemoveNode} onTabAdd={handleTabAdd} />
     ),
   }), [handleRemoveNode, handleTabAdd]) as NodeTypes;
 

@@ -1,8 +1,10 @@
 import React, { useState, useCallback, useEffect } from 'react';
-import { Handle, Position } from 'reactflow';
+import { Handle, Position, useReactFlow } from 'reactflow';
 import { DataGrid, GridColDef } from '@mui/x-data-grid';
-import { Box, IconButton, Typography } from '@mui/material';
+import { Box, IconButton, Typography, Paper } from '@mui/material';
 import DeleteIcon from '@mui/icons-material/Delete';
+import TableChartIcon from '@mui/icons-material/TableChart';
+import InputIcon from '@mui/icons-material/Input';
 
 interface SpreadsheetNodeProps {
   data: {
@@ -15,6 +17,7 @@ interface SpreadsheetNodeProps {
   };
   id: string;
   onRemove: (nodeId: string) => void;
+  onTabAdd?: (name: string, content: string, type: string) => void;
 }
 
 const styles = {
@@ -90,17 +93,110 @@ const styles = {
     borderRadius: '50%',
     animation: 'spin 1s linear infinite'
   },
+  preview: {
+    display: 'flex',
+    flexDirection: 'column' as const,
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: '100%',
+    padding: '20px',
+    cursor: 'pointer',
+    '&:hover': {
+      background: '#f5f5f5',
+    },
+  },
+  previewIcon: {
+    fontSize: '48px',
+    color: '#666',
+    marginBottom: '8px',
+  },
+  previewText: {
+    color: '#666',
+    textAlign: 'center' as const,
+  },
+  inputPreview: {
+    marginBottom: '12px',
+    padding: '8px',
+    background: '#f8f9fa',
+    borderRadius: '4px',
+    border: '1px solid #e9ecef',
+  },
+  inputHeader: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    marginBottom: '8px',
+    color: '#666',
+  },
+  inputContent: {
+    fontSize: '12px',
+    color: '#666',
+    whiteSpace: 'pre-wrap',
+    maxHeight: '100px',
+    overflow: 'auto',
+    fontFamily: 'monospace',
+  },
 };
 
-export const SpreadsheetNode: React.FC<SpreadsheetNodeProps> = ({ data, id, onRemove }) => {
+export const SpreadsheetNode: React.FC<SpreadsheetNodeProps> = ({ data, id, onRemove, onTabAdd }) => {
   const [rows, setRows] = useState<any[]>([]);
   const [columns, setColumns] = useState<GridColDef[]>([]);
   const [isExecuting, setIsExecuting] = useState(false);
+  const [isPreview, setIsPreview] = useState(true);
+  const { getEdges, getNode, setNodes, getNodes } = useReactFlow();
+
+  // Function to update input data from connected nodes
+  const updateInputData = useCallback(() => {
+    const edges = getEdges();
+    const inputEdge = edges.find(edge => edge.target === id);
+    if (inputEdge) {
+      const sourceNode = getNode(inputEdge.source);
+      if (sourceNode) {
+        // Update this node's input data with the source node's output
+        const nodes = getNodes();
+        const updatedNodes = nodes.map(node => {
+          if (node.id === id) {
+            return {
+              ...node,
+              data: {
+                ...node.data,
+                input: sourceNode.data.output || ''
+              }
+            };
+          }
+          return node;
+        });
+        setNodes(updatedNodes);
+      }
+    } else {
+      // If no input connection, clear the input data
+      const nodes = getNodes();
+      const updatedNodes = nodes.map(node => {
+        if (node.id === id) {
+          return {
+            ...node,
+            data: {
+              ...node.data,
+              input: ''
+            }
+          };
+        }
+        return node;
+      });
+      setNodes(updatedNodes);
+    }
+  }, [getEdges, getNode, getNodes, setNodes, id]);
+
+  // Update input data when edges change or when source node output changes
+  useEffect(() => {
+    updateInputData();
+  }, [getEdges(), getNode, updateInputData]);
 
   // Parse input data and update grid
   useEffect(() => {
     const processInput = async () => {
-      if (data.input && !data.output) {
+      if (data.input) {
+        console.error('Processing input data:', data.input);
         setIsExecuting(true);
         try {
           const parsedData = JSON.parse(data.input);
@@ -152,8 +248,17 @@ export const SpreadsheetNode: React.FC<SpreadsheetNodeProps> = ({ data, id, onRe
     onRemove(id);
   }, [id, onRemove]);
 
+  const handleDoubleClick = useCallback(() => {
+    if (onTabAdd && data.input) {
+      onTabAdd(data.label, data.input, 'sheets');
+    }
+  }, [onTabAdd, data.label, data.input]);
+
   return (
-    <div style={styles.container}>
+    <div 
+      style={styles.container}
+      onDoubleClick={handleDoubleClick}
+    >
       <Handle type="target" position={Position.Top} style={styles.handle} />
       <div style={styles.header}>
         <Typography style={styles.title}>{data.label}</Typography>
@@ -171,23 +276,45 @@ export const SpreadsheetNode: React.FC<SpreadsheetNodeProps> = ({ data, id, onRe
           Processing data...
         </div>
       ) : (
-        <Box style={styles.grid}>
-          <DataGrid
-            rows={rows}
-            columns={columns}
-            initialState={{
-              pagination: {
-                paginationModel: {
-                  pageSize: 5,
-                }
-              }
-            }}
-            pageSizeOptions={[5]}
-            disableRowSelectionOnClick
-            autoHeight
-            hideFooter={rows.length <= 5}
-          />
-        </Box>
+        <>
+          {data.input && (
+            <div style={styles.inputPreview}>
+              <div style={styles.inputHeader}>
+                <InputIcon fontSize="small" />
+                <Typography variant="caption">Input Data</Typography>
+              </div>
+              <div style={styles.inputContent}>
+                {data.input}
+              </div>
+            </div>
+          )}
+          {rows.length > 0 ? (
+            <Box style={styles.grid}>
+              <DataGrid
+                rows={rows}
+                columns={columns}
+                initialState={{
+                  pagination: {
+                    paginationModel: {
+                      pageSize: 5,
+                    }
+                  }
+                }}
+                pageSizeOptions={[5]}
+                disableRowSelectionOnClick
+                autoHeight
+                hideFooter={rows.length <= 5}
+              />
+            </Box>
+          ) : (
+            <div style={styles.preview}>
+              <TableChartIcon style={styles.previewIcon} />
+              <Typography style={styles.previewText}>
+                {data.input ? 'Invalid input data format' : 'No input data connected'}
+              </Typography>
+            </div>
+          )}
+        </>
       )}
       <Handle type="source" position={Position.Bottom} style={styles.handle} />
     </div>
